@@ -17,8 +17,10 @@ import plotly.express as px  # noqa: E402
 import pandas as pd  # noqa: E402
 from datetime import datetime  # noqa: E402
 import requests  # noqa: E402
-import json  # noqa: E402
 import numpy as np  # noqa: E402
+import time  # noqa: E402
+from requests.adapters import HTTPAdapter  # noqa: E402
+from urllib3.util.retry import Retry  # noqa: E402
 
 # Dashアプリの初期化
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -26,6 +28,28 @@ app.title = "TypeScore Predictor Dashboard"
 
 # API設定
 API_BASE_URL = "http://api:8000"  # コンテナ間通信ではサービス名を使用
+
+
+# リトライ機能付きHTTPセッションの作成
+def create_retry_session():
+    """リトライ機能付きのHTTPセッションを作成"""
+    session = requests.Session()
+
+    # リトライ戦略の設定
+    retry_strategy = Retry(
+        total=5,  # 最大5回リトライ
+        backoff_factor=1,  # バックオフ係数（1秒、2秒、4秒、8秒、16秒）
+        status_forcelist=[429, 500, 502, 503, 504],  # リトライするHTTPステータスコード
+        allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # リトライするHTTPメソッド
+    )
+
+    # HTTPアダプターにリトライ戦略を設定
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    return session
+
 
 # グローバル変数（データキャッシュ用）
 cached_analysis_data = None
@@ -77,14 +101,14 @@ def fetch_user_data():
     if cached_user_data is None:
         try:
             print("APIからユーザーデータを取得中...")
-            users_response = requests.get(f"{API_BASE_URL}/users")
+            users_response = requests.get(f"{API_BASE_URL}/users", timeout=30)
             users_response.raise_for_status()
             users = users_response.json()
 
             # 最初のユーザーの統計を取得
             if users:
                 user_stats_response = requests.get(
-                    f"{API_BASE_URL}/users/{users[0]}/stats"
+                    f"{API_BASE_URL}/users/{users[0]}/stats", timeout=30
                 )
                 user_stats_response.raise_for_status()
                 user_stats = user_stats_response.json()
@@ -99,178 +123,6 @@ def fetch_user_data():
             cached_user_data = {"users": [], "current_user_stats": None}
 
     return cached_user_data
-
-
-def create_user_performance_chart(df_final):
-    """ユーザー別パフォーマンス推移チャート"""
-
-    # ユーザー選択用のドロップダウン
-    users = sorted(df_final["user_id"].unique())
-
-    fig = go.Figure()
-
-    # 全ユーザーの平均スコアを薄い線で表示
-    avg_scores = df_final.groupby("created_at_x")["score"].mean().reset_index()
-    fig.add_trace(
-        go.Scatter(
-            x=avg_scores["created_at_x"],
-            y=avg_scores["score"],
-            mode="lines",
-            name="全体平均",
-            line=dict(color="lightgray", width=1, dash="dot"),
-        )
-    )
-
-    return fig, users
-
-
-def create_feature_importance_chart(model, feature_names):
-    """特徴量重要度チャート"""
-    importance_df = pd.DataFrame(
-        {"feature": feature_names, "importance": model.feature_importances_}
-    ).sort_values("importance", ascending=True)
-
-    fig = px.bar(
-        importance_df,
-        x="importance",
-        y="feature",
-        orientation="h",
-        title="特徴量重要度",
-        color="importance",
-        color_continuous_scale="viridis",
-    )
-
-    fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"})
-
-    return fig
-
-
-def create_prediction_scatter(model, X, y):
-    """予測 vs 実測散布図"""
-    y_pred = model.predict(X)
-
-    fig = px.scatter(
-        x=y,
-        y=y_pred,
-        title="予測スコア vs 実測スコア",
-        labels={"x": "実測スコア", "y": "予測スコア"},
-    )
-
-    # 完璧な予測線を追加
-    min_val = min(y.min(), y_pred.min())
-    max_val = max(y.max(), y_pred.max())
-    fig.add_trace(
-        go.Scatter(
-            x=[min_val, max_val],
-            y=[min_val, max_val],
-            mode="lines",
-            name="完璧な予測",
-            line=dict(color="red", dash="dash"),
-        )
-    )
-
-    return fig
-
-
-def create_donut_chart(df_final):
-    """スコア分布のドーナツチャート"""
-    # スコア範囲で分類
-    df_final_copy = df_final.copy()
-    df_final_copy["score_category"] = pd.cut(
-        df_final_copy["score"],
-        bins=[0, 50, 70, 85, 100],
-        labels=[
-            "低スコア (0-50)",
-            "中スコア (50-70)",
-            "高スコア (70-85)",
-            "最高スコア (85-100)",
-        ],
-    )
-
-    category_counts = df_final_copy["score_category"].value_counts()
-
-    fig = go.Figure(
-        data=[
-            go.Pie(
-                labels=category_counts.index,
-                values=category_counts.values,
-                hole=0.6,  # ドーナツチャートにする
-                marker_colors=["#ff6b6b", "#ffa500", "#4ecdc4", "#ff9ff3"],
-                textinfo="label+value+percent",
-                textfont=dict(color="white", size=12),
-            )
-        ]
-    )
-
-    fig.update_layout(
-        title="スコア分布",
-        font=dict(color="white"),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=True,
-        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.01),
-    )
-
-    return fig
-
-
-def create_time_series_chart(df_final):
-    """時系列チャート（最近30日間のスコア推移）"""
-    # 日付でグループ化して平均スコアを計算
-    df_final_copy = df_final.copy()
-    df_final_copy["date"] = pd.to_datetime(df_final_copy["created_at_x"]).dt.date
-
-    # 最近30日間のデータを取得
-    latest_date = df_final_copy["date"].max()
-    thirty_days_ago = latest_date - pd.Timedelta(days=30)
-    recent_data = df_final_copy[df_final_copy["date"] >= thirty_days_ago]
-
-    daily_stats = recent_data.groupby("date").agg({"score": ["mean", "count"]}).round(1)
-    daily_stats.columns = ["平均スコア", "セッション数"]
-    daily_stats = daily_stats.reset_index()
-
-    # 移動平均を計算
-    daily_stats["移動平均（7日間）"] = (
-        daily_stats["平均スコア"].rolling(window=7, min_periods=1).mean()
-    )
-
-    fig = go.Figure()
-
-    # 平均スコアのバーチャート
-    fig.add_trace(
-        go.Bar(
-            x=daily_stats["date"],
-            y=daily_stats["平均スコア"],
-            name="日別平均スコア",
-            marker_color="#ffa500",
-            opacity=0.7,
-        )
-    )
-
-    # 移動平均のライン
-    fig.add_trace(
-        go.Scatter(
-            x=daily_stats["date"],
-            y=daily_stats["移動平均（7日間）"],
-            mode="lines",
-            name="移動平均（7日間）",
-            line=dict(color="#9b59b6", width=3),
-        )
-    )
-
-    fig.update_layout(
-        title="最近30日間のスコア推移",
-        xaxis_title="日付",
-        yaxis_title="スコア",
-        font=dict(color="white"),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(gridcolor="#444"),
-        yaxis=dict(gridcolor="#444"),
-        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.01),
-    )
-
-    return fig
 
 
 # レイアウト定義
@@ -773,14 +625,8 @@ def render_three_panels(n, selected_user):
                 )
                 user_stats_response.raise_for_status()
                 user_stats = user_stats_response.json()
-                latest_score = user_stats["latest_score"]
-                score_change_text = "N/A"  # APIからは変化量を取得できないため
             except:
-                latest_score = 0
-                score_change_text = "N/A"
-        else:
-            latest_score = 0
-            score_change_text = "N/A"
+                pass
 
         # ユーザー別パフォーマンスチャート（簡易版）
         fig_user = go.Figure()
@@ -861,7 +707,7 @@ def render_three_panels(n, selected_user):
                                             "総セッション数",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -875,12 +721,12 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                                 html.Div(
@@ -889,7 +735,7 @@ def render_three_panels(n, selected_user):
                                             "平均スコア",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -903,12 +749,12 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                                 html.Div(
@@ -917,7 +763,7 @@ def render_three_panels(n, selected_user):
                                             "最高スコア",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -931,12 +777,12 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                             ],
@@ -954,7 +800,7 @@ def render_three_panels(n, selected_user):
                                             "最低スコア",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -968,12 +814,12 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                                 html.Div(
@@ -982,7 +828,7 @@ def render_three_panels(n, selected_user):
                                             "最新スコア",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -996,12 +842,12 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                                 html.Div(
@@ -1010,7 +856,7 @@ def render_three_panels(n, selected_user):
                                             "改善傾向",
                                             style={
                                                 "color": "#888888",
-                                                "fontSize": "12px",
+                                                "fontSize": "11px",
                                                 "display": "block",
                                             },
                                         ),
@@ -1030,19 +876,43 @@ def render_three_panels(n, selected_user):
                                         ),
                                     ],
                                     style={
-                                        "padding": "10px",
+                                        "padding": "8px",
                                         "backgroundColor": "#3d3d3d",
                                         "borderRadius": "5px",
-                                        "margin": "5px",
+                                        "margin": "3px",
                                         "flex": "1",
-                                        "minWidth": "120px",
+                                        "minWidth": "100px",
                                     },
                                 ),
                             ],
-                            style={"display": "flex", "flexWrap": "wrap"},
+                            style={
+                                "display": "flex",
+                                "flexWrap": "wrap",
+                                "width": "100%",
+                            },
+                        ),
+                        # グラフを同じカード内に配置
+                        html.Div(
+                            [
+                                dcc.Graph(
+                                    id="user-performance-chart",
+                                    figure=fig_user,
+                                    style={"height": "250px"},
+                                )
+                            ],
+                            style={
+                                "width": "100%",
+                                "marginTop": "15px",
+                                "maxHeight": "300px",
+                            },
                         ),
                     ],
-                    style={"marginBottom": "15px"},
+                    style={
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "width": "100%",
+                        "marginBottom": "15px",
+                    },
                 )
             except Exception as e:
                 print(f"ユーザー統計取得エラー: {str(e)}")
@@ -1066,22 +936,22 @@ def render_three_panels(n, selected_user):
                                 "marginRight": "15px",
                             },
                         ),
+                        # グラフを同じカード内に配置
                         html.Div(
                             [
                                 dcc.Graph(
                                     id="user-performance-chart",
                                     figure=fig_user,
-                                    style={"height": "300px"},
+                                    style={"height": "200px"},
                                 )
                             ],
-                            style={"flex": "2", "minWidth": "400px"},
+                            style={"width": "100%", "marginTop": "10px"},
                         ),
                     ],
                     style={
                         "display": "flex",
-                        "flexWrap": "wrap",
-                        "gap": "15px",
-                        "alignItems": "flex-start",
+                        "flexDirection": "column",
+                        "width": "100%",
                     },
                 )
         else:
@@ -1120,242 +990,22 @@ def render_three_panels(n, selected_user):
                 },
             )
 
-        user_stats_display = html.Div(
-            [
-                # 統計カードとグラフを横並びに配置
-                html.Div(
-                    [
-                        # 左側: 統計カード（2列）
-                        html.Div(
-                            [
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "総セッション数",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['total_sessions']}",
-                                                    style={
-                                                        "color": "#ffffff",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "平均スコア",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['avg_score']:.0f}",
-                                                    style={
-                                                        "color": "#ffffff",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                    ],
-                                    style={
-                                        "display": "flex",
-                                        "flexWrap": "wrap",
-                                        "marginBottom": "10px",
-                                    },
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "最高スコア",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['max_score']:.0f}",
-                                                    style={
-                                                        "color": "#4CAF50",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "最低スコア",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['min_score']:.0f}",
-                                                    style={
-                                                        "color": "#FF9800",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                    ],
-                                    style={
-                                        "display": "flex",
-                                        "flexWrap": "wrap",
-                                        "marginBottom": "10px",
-                                    },
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "最新スコア",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['latest_score']:.0f}",
-                                                    style={
-                                                        "color": "#2196F3",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                        html.Div(
-                                            [
-                                                html.Span(
-                                                    "改善傾向",
-                                                    style={
-                                                        "color": "#888888",
-                                                        "fontSize": "12px",
-                                                        "display": "block",
-                                                    },
-                                                ),
-                                                html.Span(
-                                                    f"{user_stats['improvement_trend']}",
-                                                    style={
-                                                        "color": "#4CAF50"
-                                                        if user_stats[
-                                                            "improvement_trend"
-                                                        ]
-                                                        == "improving"
-                                                        else "#FF5722"
-                                                        if user_stats[
-                                                            "improvement_trend"
-                                                        ]
-                                                        == "declining"
-                                                        else "#FFC107",
-                                                        "fontSize": "16px",
-                                                        "fontWeight": "bold",
-                                                    },
-                                                ),
-                                            ],
-                                            style={
-                                                "padding": "10px",
-                                                "backgroundColor": "#3d3d3d",
-                                                "borderRadius": "5px",
-                                                "margin": "5px",
-                                                "flex": "1",
-                                                "minWidth": "120px",
-                                            },
-                                        ),
-                                    ],
-                                    style={"display": "flex", "flexWrap": "wrap"},
-                                ),
-                            ],
-                            style={
-                                "flex": "1",
-                                "minWidth": "300px",
-                                "marginRight": "15px",
-                            },
-                        ),
-                        # 右側: グラフ
-                        html.Div(
-                            [
-                                dcc.Graph(
-                                    id="user-performance-chart",
-                                    figure=fig_user,
-                                    style={"height": "300px"},
-                                )
-                            ],
-                            style={"flex": "2", "minWidth": "400px"},
-                        ),
-                    ],
-                    style={
-                        "display": "flex",
-                        "flexWrap": "wrap",
-                        "gap": "15px",
-                        "alignItems": "flex-start",
-                    },
-                )
-            ]
+        # user_stats_displayを定義
+        user_stats_display = (
+            user_stats_info
+            if selected_user
+            else html.Div(
+                [
+                    html.P(
+                        "ユーザーを選択してください",
+                        style={
+                            "color": "#cccccc",
+                            "textAlign": "center",
+                            "padding": "20px",
+                        },
+                    )
+                ]
+            )
         )
 
         # 中央パネル：特徴量重要度チャート

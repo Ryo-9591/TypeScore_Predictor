@@ -10,6 +10,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     command: python src/api.py
+    networks:
+      - typescore-network
 
   dashboard:
     build: .
@@ -24,3 +26,9 @@ services:
     command: python src/dashboard.py
     depends_on:
       - api
+    networks:
+      - typescore-network
+
+networks:
+  typescore-network:
+    driver: bridge
