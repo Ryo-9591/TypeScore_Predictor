@@ -44,6 +44,7 @@ app.add_middleware(
 cached_model = None
 cached_data = None
 cached_metrics = None
+cached_analysis_data = None
 
 
 def load_model():
@@ -65,13 +66,14 @@ def load_model():
         }
         cached_metrics = metrics
         print("モデル読み込み完了")
+        print(f"キャッシュされたデータのカラム: {list(df_final.columns)}")
 
     return cached_model, cached_data, cached_metrics
 
 
 # Pydanticモデル定義
 class PredictionRequest(BaseModel):
-    user_id: int
+    user_id: str
     prev_score: Optional[float] = None
     avg_score_3: Optional[float] = None
     max_score_3: Optional[float] = None
@@ -88,7 +90,7 @@ class PredictionResponse(BaseModel):
 
 
 class UserStatsResponse(BaseModel):
-    user_id: int
+    user_id: str
     total_sessions: int
     avg_score: float
     max_score: float
@@ -97,12 +99,28 @@ class UserStatsResponse(BaseModel):
     improvement_trend: str
 
 
+class UserTimeSeriesResponse(BaseModel):
+    user_id: str
+    timestamps: List[str]
+    scores: List[float]
+    total_misses: List[float]
+
+
 class ModelMetricsResponse(BaseModel):
     rmse: float
     mae: float
     sample_count: int
     feature_count: int
     last_updated: str
+
+
+class AnalysisResponse(BaseModel):
+    status: str
+    execution_time: float
+    metrics: Dict[str, Any]
+    data_info: Dict[str, Any]
+    feature_importance: Dict[str, float]
+    timestamp: str
 
 
 # APIエンドポイント
@@ -116,8 +134,10 @@ async def root():
             "predict": "/predict",
             "users": "/users",
             "user_stats": "/users/{user_id}/stats",
+            "user_timeseries": "/users/{user_id}/timeseries",
             "metrics": "/metrics",
             "retrain": "/retrain",
+            "analyze": "/analyze",
             "docs": "/docs",
         },
     }
@@ -135,7 +155,13 @@ async def predict_score(request: PredictionRequest):
 
         for feature_name in feature_names:
             if feature_name == "user_id":
-                feature_values.append(request.user_id)
+                # user_idは文字列なので、ハッシュ値に変換して数値化
+                import hashlib
+
+                user_id_hash = int(
+                    hashlib.md5(request.user_id.encode()).hexdigest()[:8], 16
+                )
+                feature_values.append(user_id_hash)
             elif feature_name == "prev_score":
                 feature_values.append(request.prev_score or 0.0)
             elif feature_name == "avg_score_3":
@@ -177,27 +203,70 @@ async def predict_score(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"予測エラー: {str(e)}")
 
 
-@app.get("/users", response_model=List[int])
+@app.get("/users", response_model=List[str])
 async def get_users():
     """ユーザー一覧取得"""
     try:
-        _, data, _ = load_model()
-        users = sorted(data["df_final"]["user_id"].unique().tolist())
+        # キャッシュされたデータからユーザー一覧を取得
+        _, cached_data, _ = load_model()
+        df_final = cached_data["df_final"]
+        users = sorted(
+            [str(user_id) for user_id in df_final["user_id"].unique().tolist()]
+        )
         return users
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ユーザー取得エラー: {str(e)}")
 
 
-@app.get("/users/{user_id}/stats", response_model=UserStatsResponse)
-async def get_user_stats(user_id: int):
-    """ユーザー統計情報取得"""
+@app.get("/users/{user_id}/timeseries", response_model=UserTimeSeriesResponse)
+async def get_user_timeseries(user_id: str):
+    """ユーザーの時系列データ取得"""
     try:
-        _, data, _ = load_model()
-        df_final = data["df_final"]
+        print(f"ユーザー時系列データ取得開始: {user_id}")
 
-        user_data = df_final[df_final["user_id"] == user_id]
+        # キャッシュされたデータを使用
+        _, cached_data, _ = load_model()
+        df_final = cached_data["df_final"]
+
+        user_data = df_final[df_final["user_id"].astype(str) == user_id]
 
         if len(user_data) == 0:
+            raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+
+        # 時系列データをソート
+        user_data_sorted = user_data.sort_values("created_at")
+
+        return UserTimeSeriesResponse(
+            user_id=user_id,
+            timestamps=[str(ts) for ts in user_data_sorted["created_at"]],
+            scores=[float(score) for score in user_data_sorted["score"]],
+            total_misses=[float(miss) for miss in user_data_sorted["total_miss"]],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"時系列データ取得エラー詳細: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"時系列データ取得エラー: {str(e)}")
+
+
+@app.get("/users/{user_id}/stats", response_model=UserStatsResponse)
+async def get_user_stats(user_id: str):
+    """ユーザー統計情報取得"""
+    try:
+        print(f"ユーザー統計取得開始: {user_id}")
+
+        # キャッシュされたデータを使用
+        _, cached_data, _ = load_model()
+        df_final = cached_data["df_final"]
+        print(f"データ読み込み完了: {df_final.shape}")
+        print(f"カラム一覧: {list(df_final.columns)}")
+
+        user_data = df_final[df_final["user_id"].astype(str) == user_id]
+        print(f"ユーザーデータ: {len(user_data)}行")
+
+        if len(user_data) == 0:
+            print(f"ユーザーが見つかりません: {user_id}")
             raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
 
         # 統計計算
@@ -205,6 +274,14 @@ async def get_user_stats(user_id: int):
         avg_score = user_data["score"].mean()
         max_score = user_data["score"].max()
         min_score = user_data["score"].min()
+
+        # created_atカラムの存在確認
+        if "created_at" not in user_data.columns:
+            print("created_atカラムが見つかりません")
+            raise HTTPException(
+                status_code=500, detail="created_atカラムが見つかりません"
+            )
+
         latest_score = user_data.sort_values("created_at")["score"].iloc[-1]
 
         # 改善傾向の計算
@@ -217,6 +294,8 @@ async def get_user_stats(user_id: int):
             )
         else:
             trend = "stable"
+
+        print(f"統計計算完了: sessions={total_sessions}, avg={avg_score}")
 
         return UserStatsResponse(
             user_id=user_id,
@@ -231,6 +310,10 @@ async def get_user_stats(user_id: int):
     except HTTPException:
         raise
     except Exception as e:
+        print(f"統計取得エラー詳細: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"統計取得エラー: {str(e)}")
 
 
@@ -250,6 +333,76 @@ async def get_model_metrics():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"メトリクス取得エラー: {str(e)}")
+
+
+def run_analysis_process():
+    """分析処理を実行して結果を返す"""
+    global cached_analysis_data
+
+    if cached_analysis_data is None:
+        start_time = datetime.now()
+
+        # データ準備とクリーニング
+        df_final = prepare_data()
+
+        # 特徴量エンジニアリング
+        X, y = engineer_features(df_final)
+
+        # モデル学習と評価
+        model, metrics = train_and_evaluate_model(X, y)
+
+        end_time = datetime.now()
+        execution_time = (end_time - start_time).total_seconds()
+
+        # 特徴量重要度
+        feature_importance = dict(zip(X.columns, model.feature_importances_))
+
+        # データ情報
+        data_info = {
+            "total_samples": len(df_final),
+            "unique_users": df_final["user_id"].nunique(),
+            "feature_count": len(X.columns),
+            "score_range": {
+                "min": float(df_final["score"].min()),
+                "max": float(df_final["score"].max()),
+                "mean": float(df_final["score"].mean()),
+                "median": float(df_final["score"].median()),
+            },
+            "training_samples": len(X),
+            "test_samples": int(len(X) * 0.2),  # 推定値
+        }
+
+        # メトリクス情報
+        metrics_info = {
+            "test_rmse": metrics["test_rmse"],
+            "test_mae": metrics["test_mae"],
+            "target_mae": 200.0,
+            "mae_diff": metrics["test_mae"] - 200.0,
+            "achievement_status": "未達成" if metrics["test_mae"] > 200.0 else "達成",
+        }
+
+        cached_analysis_data = {
+            "status": "completed",
+            "execution_time": execution_time,
+            "metrics": metrics_info,
+            "data_info": data_info,
+            "feature_importance": feature_importance,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        print(f"分析完了 - 実行時間: {execution_time:.2f}秒")
+
+    return cached_analysis_data
+
+
+@app.post("/analyze", response_model=AnalysisResponse)
+async def run_analysis():
+    """分析処理実行"""
+    try:
+        analysis_result = run_analysis_process()
+        return AnalysisResponse(**analysis_result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"分析エラー: {str(e)}")
 
 
 @app.post("/retrain")
@@ -297,5 +450,13 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+
+    # 起動時に分析を実行
+    print("API起動中...")
+    try:
+        run_analysis_process()
+        print("初期分析完了")
+    except Exception as e:
+        print(f"初期分析エラー: {str(e)}")
 
     uvicorn.run(app, host="0.0.0.0", port=8000)

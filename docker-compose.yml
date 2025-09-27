@@ -1,13 +1,15 @@
 services:
-  typescore-predictor:
+  api:
     build: .
-    container_name: typescore-predictor-main
+    container_name: typescore-api
+    ports:
+      - "8000:8000"
     volumes:
       - ./data:/app/data
       - ./output:/app/output
     environment:
       - PYTHONUNBUFFERED=1
-    command: python src/main.py
+    command: python src/api.py
 
   dashboard:
     build: .
@@ -21,18 +23,4 @@ services:
       - PYTHONUNBUFFERED=1
     command: python src/dashboard.py
     depends_on:
-      - typescore-predictor
-
-  api:
-    build: .
-    container_name: typescore-api
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
-      - ./output:/app/output
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: python src/api.py
-    depends_on:
-      - typescore-predictor
+      - api

@@ -57,6 +57,9 @@ def merge_score_and_miss(
     """df_scoreとdf_missを結合"""
     print("スコアデータとミスデータを結合中...")
 
+    print(f"df_score columns: {list(df_score.columns)}")
+    print(f"df_miss_agg columns: {list(df_miss_agg.columns)}")
+
     # タイムスタンプ列を特定
     score_col = next(
         (col for col in ["created_at", "updated_at"] if col in df_score.columns), None
@@ -66,8 +69,12 @@ def merge_score_and_miss(
         None,
     )
 
+    print(f"score_col: {score_col}, miss_col: {miss_col}")
+
     if not score_col or not miss_col:
-        raise ValueError("タイムスタンプ列が見つかりません")
+        raise ValueError(
+            f"タイムスタンプ列が見つかりません - score_col: {score_col}, miss_col: {miss_col}"
+        )
 
     # 列名を統一
     if score_col != miss_col:
@@ -88,6 +95,12 @@ def merge_with_user_data(
     print("ユーザー情報を結合中...")
 
     df_final = df_merged.merge(df_user, on="user_id", how="left")
+
+    # 重複するカラム名を処理（created_at_xをcreated_atに統一）
+    if "created_at_x" in df_final.columns:
+        df_final = df_final.rename(columns={"created_at_x": "created_at"})
+    if "updated_at_x" in df_final.columns:
+        df_final = df_final.rename(columns={"updated_at_x": "updated_at"})
 
     # 日付型への変換
     for col in ["created_at", "updated_at"]:
