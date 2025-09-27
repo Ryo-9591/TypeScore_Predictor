@@ -10,8 +10,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import LabelEncoder
 import plotly.graph_objects as go
-import plotly.express as px
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 import os
 from config import MODEL_CONFIG, CV_CONFIG, TARGET_ACCURACY, OUTPUT_DIR, OUTPUT_FILES
 
@@ -74,8 +73,13 @@ def perform_time_series_split(
     # 最後の分割を使用（最新のデータをテストセットとして使用）
     train_idx, test_idx = splits[-1]
 
+    # データリークを防ぐため、学習データの最後の20%を除外
+    train_size = int(len(train_idx) * 0.8)
+    train_idx = train_idx[:train_size]
+
     print(f"学習データ: {len(train_idx)}サンプル")
     print(f"テストデータ: {len(test_idx)}サンプル")
+    print("データリーク防止のため、学習データの最後20%を除外しました")
 
     return train_idx, test_idx
 
@@ -100,12 +104,12 @@ def train_xgboost_model(
     # XGBoost Regressorの初期化
     model = xgb.XGBRegressor(**MODEL_CONFIG)
 
-    # モデルの学習（早期停止付き）
+    # モデルの学習（早期停止付き、より厳格な設定）
     model.fit(
         X_train,
         y_train,
         eval_set=[(X_test, y_test)],
-        early_stopping_rounds=20,
+        early_stopping_rounds=10,  # より早い停止
         verbose=False,
     )
 

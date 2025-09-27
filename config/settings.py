@@ -18,15 +18,16 @@ SCORE_FILE = "t_score.csv"
 MISS_FILE = "t_miss.csv"
 USER_FILE = "m_user.csv"
 
-# モデル設定
+# モデル設定（過学習を防ぐためより保守的に設定）
 MODEL_CONFIG = {
-    "n_estimators": 200,
-    "max_depth": 4,  # 過学習を防ぐため浅くする
-    "learning_rate": 0.05,  # 学習率を下げる
-    "subsample": 0.8,  # サブサンプリングで過学習を防ぐ
-    "colsample_bytree": 0.8,  # 特徴量サブサンプリング
-    "reg_alpha": 0.1,  # L1正則化
-    "reg_lambda": 0.1,  # L2正則化
+    "n_estimators": 100,     # 木の数を減らす
+    "max_depth": 3,          # より浅い木にする
+    "learning_rate": 0.1,    # 学習率を上げる
+    "subsample": 0.7,        # より強いサブサンプリング
+    "colsample_bytree": 0.7, # より強い特徴量サブサンプリング
+    "reg_alpha": 1.0,        # より強いL1正則化
+    "reg_lambda": 1.0,       # より強いL2正則化
+    "min_child_weight": 5,   # 子ノードの最小重みを増やす
     "random_state": 42,
     "n_jobs": -1,
 }
@@ -35,7 +36,7 @@ MODEL_CONFIG = {
 CV_CONFIG = {"n_splits": 5}
 
 # 評価指標の目標値
-TARGET_ACCURACY = 200.0  # MAEの目標値（点）- 現実的な値に調整
+TARGET_ACCURACY = 50.0  # MAEの目標値（点）- より現実的な値に調整
 
 # 特徴量エンジニアリング設定
 FEATURE_CONFIG = {

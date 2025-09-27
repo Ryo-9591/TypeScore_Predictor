@@ -124,33 +124,16 @@ def create_performance_features(df: pd.DataFrame) -> pd.DataFrame:
             .reset_index(drop=True)
         )
         df_with_features["avg_miss_3"] = avg_miss_3
-        
-        # ミスタイプ率の特徴量を追加
-        if "typing_count" in df_with_features.columns:
-            # ミスタイプ率 = ミスタイプ数 / タイピング数
-            miss_rate = (
-                grouped["total_miss"] / (grouped["typing_count"] + 1)  # +1でゼロ除算を回避
-                .rolling(window=3, min_periods=1)
-                .mean()
-                .shift(1)
-                .reset_index(drop=True)
-            )
-            df_with_features["miss_rate_3"] = miss_rate
-            
-            # 直前のミスタイプ率
-            prev_miss_rate = (
-                grouped["total_miss"] / (grouped["typing_count"] + 1)
-                .shift(1)
-                .reset_index(drop=True)
-            )
-            df_with_features["prev_miss_rate"] = prev_miss_rate
-    else:
-        print("警告: total_miss列が見つかりません。ミスタイプ関連特徴量は作成されません。")
-        df_with_features["avg_miss_3"] = 0
-        df_with_features["miss_rate_3"] = 0
-        df_with_features["prev_miss_rate"] = 0
 
-    # その他の有用な特徴量
+        # ミスタイプ率の特徴量は一旦削除（計算が複雑すぎるため）
+        # 基本的な特徴量のみを使用
+    else:
+        print(
+            "警告: total_miss列が見つかりません。ミスタイプ関連特徴量は作成されません。"
+        )
+        df_with_features["avg_miss_3"] = 0
+
+    # その他の有用な特徴量（すべてデータリークを防ぐためshift(1)を使用）
     # 過去のスコアの標準偏差（安定性の指標）
     score_std_3 = (
         grouped["score"]
@@ -198,7 +181,7 @@ def prepare_features_and_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Seri
     """
     print("特徴量とターゲットを準備中...")
 
-    # 除外する列を定義
+    # 除外する列を定義（データリークを防ぐため）
     exclude_columns = [
         "user_id",
         "created_at_x",
@@ -206,16 +189,17 @@ def prepare_features_and_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Seri
         "created_at_y",
         "updated_at_y",
         "target_score",
+        "score",  # 現在のスコアはターゲットと同じ情報でデータリーク
         "score_id",  # ID列は予測に不要
         "username",  # 匿名化済みのため予測に不要
-        "email",     # 匿名化済みのため予測に不要
+        "email",  # 匿名化済みのため予測に不要
         "password",  # セキュリティ上除外
         "is_superuser",  # システム管理用のため予測に不要
-        "is_staff",      # システム管理用のため予測に不要
-        "is_active",     # システム管理用のため予測に不要
-        "date_joined",   # 登録日は予測に不要
-        "permission",    # システム管理用のため予測に不要
-        "del_flg",       # 削除フラグは予測に不要
+        "is_staff",  # システム管理用のため予測に不要
+        "is_active",  # システム管理用のため予測に不要
+        "date_joined",  # 登録日は予測に不要
+        "permission",  # システム管理用のため予測に不要
+        "del_flg",  # 削除フラグは予測に不要
     ]
 
     # 特徴量Xを作成（除外列を除く）
@@ -241,9 +225,7 @@ def prepare_features_and_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Seri
     initial_rows = X.shape[0]
 
     # 時系列特徴量の欠損値を0で補完
-    time_series_features = FEATURE_CONFIG["time_series_features"] + [
-        "miss_rate_3", "prev_miss_rate"
-    ]
+    time_series_features = FEATURE_CONFIG["time_series_features"]
     for feature in time_series_features:
         if feature in X.columns:
             X[feature] = X[feature].fillna(0)
