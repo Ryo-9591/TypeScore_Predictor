@@ -1,12 +1,34 @@
-version: "3.8"
-
 services:
-  typescore-predictor:
+  api:
     build: .
-    container_name: typescore-predictor
+    container_name: typescore-api
+    ports:
+      - "8000:8000"
     volumes:
       - ./data:/app/data
       - ./output:/app/output
     environment:
       - PYTHONUNBUFFERED=1
-    command: python scripts/run_predictor.py
+    command: python src/api.py
+    networks:
+      - typescore-network
+
+  dashboard:
+    build: .
+    container_name: typescore-dashboard
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python src/dashboard.py
+    depends_on:
+      - api
+    networks:
+      - typescore-network
+
+networks:
+  typescore-network:
+    driver: bridge

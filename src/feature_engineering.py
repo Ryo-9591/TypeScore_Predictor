@@ -88,6 +88,8 @@ def prepare_features_and_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Seri
         "updated_at_x",
         "created_at_y",
         "updated_at_y",
+        "created_at",
+        "updated_at",
         "target_score",
         "score",
         "score_id",

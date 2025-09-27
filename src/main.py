@@ -12,12 +12,17 @@ TypeScore Predictor - メイン実行スクリプト
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
+
+# プロジェクトルートをPythonパスに追加
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 # 自作モジュールのインポート
-from .data_preparation import prepare_data
-from .feature_engineering import engineer_features
-from .model_training import train_and_evaluate_model
-from .feature_importance_analysis import analyze_feature_importance
+from src.data_preparation import prepare_data
+from src.feature_engineering import engineer_features
+from src.model_training import train_and_evaluate_model
+from src.feature_importance_analysis import analyze_feature_importance
 from config import OUTPUT_DIR, OUTPUT_FILES, TARGET_ACCURACY
 
 
