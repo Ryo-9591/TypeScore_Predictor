@@ -16,48 +16,23 @@ from config import OUTPUT_DIR, OUTPUT_FILES
 def get_feature_importance(
     model: xgb.XGBRegressor, feature_names: List[str]
 ) -> pd.DataFrame:
-    """
-    学習済みXGBoostモデルから特徴量重要度を取得する
-
-    Args:
-        model: 学習済みXGBoostモデル
-        feature_names: 特徴量名のリスト
-
-    Returns:
-        pd.DataFrame: 特徴量重要度のデータフレーム
-    """
+    """学習済みXGBoostモデルから特徴量重要度を取得"""
     print("特徴量重要度を取得中...")
 
-    # 特徴量重要度を取得
-    importance_scores = model.feature_importances_
-
-    # データフレームを作成
     importance_df = pd.DataFrame(
-        {"feature": feature_names, "importance": importance_scores}
-    )
-
-    # 重要度で降順ソート
-    importance_df = importance_df.sort_values("importance", ascending=False)
+        {"feature": feature_names, "importance": model.feature_importances_}
+    ).sort_values("importance", ascending=False)
 
     print(f"特徴量重要度を取得完了: {len(importance_df)}個の特徴量")
-
     return importance_df
 
 
 def create_importance_bar_chart(importance_df: pd.DataFrame, top_n: int = 10) -> None:
-    """
-    特徴量重要度を棒グラフで可視化する
-
-    Args:
-        importance_df: 特徴量重要度のデータフレーム
-        top_n: 表示する上位特徴量数
-    """
+    """特徴量重要度を棒グラフで可視化"""
     print(f"特徴量重要度の棒グラフを作成中（上位{top_n}個）...")
 
-    # 上位N個の特徴量を取得
     top_features = importance_df.head(top_n)
 
-    # 棒グラフの作成
     fig = go.Figure(
         data=[
             go.Bar(
@@ -74,83 +49,52 @@ def create_importance_bar_chart(importance_df: pd.DataFrame, top_n: int = 10) ->
         ]
     )
 
-    # レイアウトの設定
     fig.update_layout(
         title=f"特徴量重要度（上位{top_n}個）",
         xaxis_title="重要度",
         yaxis_title="特徴量",
         width=800,
         height=max(400, len(top_features) * 40),
-        yaxis=dict(autorange="reversed"),  # 重要度の高い順に表示
+        yaxis=dict(autorange="reversed"),
     )
 
-    # 出力ディレクトリの作成
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    # HTMLファイルとして保存
     output_file = OUTPUT_DIR / OUTPUT_FILES["importance_chart"]
     fig.write_html(output_file)
     print(f"特徴量重要度チャートを {output_file} に保存しました")
 
 
 def analyze_feature_impact(importance_df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    特徴量の影響を分析し、洞察を提供する
-
-    Args:
-        importance_df: 特徴量重要度のデータフレーム
-
-    Returns:
-        Dict[str, Any]: 分析結果
-    """
+    """特徴量の影響を分析"""
     print("特徴量の影響を分析中...")
 
-    analysis = {}
-
-    # 最も重要な特徴量
-    top_feature = importance_df.iloc[0]
-    analysis["most_important_feature"] = {
-        "name": top_feature["feature"],
-        "importance": top_feature["importance"],
-    }
-
-    # 上位3つの特徴量
-    top_3_features = importance_df.head(3)
-    analysis["top_3_features"] = [
-        {"name": row["feature"], "importance": row["importance"]}
-        for _, row in top_3_features.iterrows()
-    ]
-
-    # ミスタイプ関連の特徴量の重要度
-    miss_features = importance_df[
-        importance_df["feature"].str.contains("miss", case=False)
-    ]
-    if not miss_features.empty:
-        analysis["miss_features"] = [
+    analysis = {
+        "most_important_feature": {
+            "name": importance_df.iloc[0]["feature"],
+            "importance": importance_df.iloc[0]["importance"],
+        },
+        "top_3_features": [
             {"name": row["feature"], "importance": row["importance"]}
-            for _, row in miss_features.iterrows()
-        ]
-    else:
-        analysis["miss_features"] = []
-
-    # スコア関連の特徴量の重要度
-    score_features = importance_df[
-        importance_df["feature"].str.contains("score", case=False)
-    ]
-    if not score_features.empty:
-        analysis["score_features"] = [
+            for _, row in importance_df.head(3).iterrows()
+        ],
+        "miss_features": [
             {"name": row["feature"], "importance": row["importance"]}
-            for _, row in score_features.iterrows()
-        ]
-    else:
-        analysis["score_features"] = []
-
-    # 重要度の分布統計
-    analysis["importance_stats"] = {
-        "mean": importance_df["importance"].mean(),
-        "std": importance_df["importance"].std(),
-        "max": importance_df["importance"].max(),
-        "min": importance_df["importance"].min(),
+            for _, row in importance_df[
+                importance_df["feature"].str.contains("miss", case=False)
+            ].iterrows()
+        ],
+        "score_features": [
+            {"name": row["feature"], "importance": row["importance"]}
+            for _, row in importance_df[
+                importance_df["feature"].str.contains("score", case=False)
+            ].iterrows()
+        ],
+        "importance_stats": {
+            "mean": importance_df["importance"].mean(),
+            "std": importance_df["importance"].std(),
+            "max": importance_df["importance"].max(),
+            "min": importance_df["importance"].min(),
+        },
     }
 
     return analysis

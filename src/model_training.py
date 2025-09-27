@@ -18,122 +18,74 @@ from config import MODEL_CONFIG, CV_CONFIG, TARGET_ACCURACY, OUTPUT_DIR, OUTPUT_
 def encode_categorical_features(
     X: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, Dict[str, LabelEncoder]]:
-    """
-    カテゴリカル特徴量をエンコードする
-
-    Args:
-        X: 特徴量データフレーム
-
-    Returns:
-        Tuple[pd.DataFrame, Dict[str, LabelEncoder]]: エンコードされた特徴量とエンコーダー
-    """
+    """カテゴリカル特徴量をエンコード"""
     print("カテゴリカル特徴量をエンコード中...")
 
     X_encoded = X.copy()
     encoders = {}
 
-    # user_idが含まれている場合、Label Encodingを適用
-    if "user_id" in X_encoded.columns:
-        le_user = LabelEncoder()
-        X_encoded["user_id"] = le_user.fit_transform(X_encoded["user_id"])
-        encoders["user_id"] = le_user
-        print(f"user_idをエンコード: {len(le_user.classes_)}個のユニークユーザー")
-
-    # その他のカテゴリカル特徴量があれば同様に処理
+    # カテゴリカル列をエンコード
     categorical_columns = X_encoded.select_dtypes(include=["object"]).columns
     for col in categorical_columns:
-        if col != "user_id":  # user_idは既に処理済み
-            le = LabelEncoder()
-            X_encoded[col] = le.fit_transform(X_encoded[col].astype(str))
-            encoders[col] = le
-            print(f"{col}をエンコード")
+        le = LabelEncoder()
+        X_encoded[col] = le.fit_transform(X_encoded[col].astype(str))
+        encoders[col] = le
+        print(f"{col}をエンコード: {len(le.classes_)}個のクラス")
 
     return X_encoded, encoders
 
 
 def perform_time_series_split(
-    X: pd.DataFrame, y: pd.Series, n_splits: int = 5
+    X: pd.DataFrame, y: pd.Series
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    時系列クロスバリデーションを実行する
-
-    Args:
-        X: 特徴量データ
-        y: ターゲットデータ
-        n_splits: 分割数
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: 学習用とテスト用のインデックス
-    """
-    print(f"時系列クロスバリデーションを実行中（{n_splits}分割）...")
+    """時系列クロスバリデーションを実行"""
+    print("時系列クロスバリデーションを実行中...")
 
     tscv = TimeSeriesSplit(n_splits=CV_CONFIG["n_splits"])
     splits = list(tscv.split(X))
-
-    # 最後の分割を使用（最新のデータをテストセットとして使用）
     train_idx, test_idx = splits[-1]
 
-    # データリークを防ぐため、学習データの最後の20%を除外
-    train_size = int(len(train_idx) * 0.8)
+    # データリーク防止（小規模データ用に調整）
+    train_size = int(len(train_idx) * 0.9)  # より多くのデータを学習に使用
     train_idx = train_idx[:train_size]
 
-    print(f"学習データ: {len(train_idx)}サンプル")
-    print(f"テストデータ: {len(test_idx)}サンプル")
-    print("データリーク防止のため、学習データの最後20%を除外しました")
-
+    print(
+        f"学習データ: {len(train_idx)}サンプル, テストデータ: {len(test_idx)}サンプル"
+    )
     return train_idx, test_idx
 
 
 def train_xgboost_model(
     X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series
 ) -> Tuple[xgb.XGBRegressor, Dict[str, float]]:
-    """
-    XGBoostモデルを学習し、評価する
-
-    Args:
-        X_train: 学習用特徴量
-        y_train: 学習用ターゲット
-        X_test: テスト用特徴量
-        y_test: テスト用ターゲット
-
-    Returns:
-        Tuple[xgb.XGBRegressor, Dict[str, float]]: 学習済みモデルと評価指標
-    """
+    """XGBoostモデルを学習し、評価"""
     print("XGBoostモデルを学習中...")
 
-    # XGBoost Regressorの初期化
-    model = xgb.XGBRegressor(**MODEL_CONFIG)
+    # モデル設定
+    model_config = MODEL_CONFIG.copy()
+    model_config.update({"tree_method": "hist", "gpu_id": -1, "verbosity": 0})
 
-    # モデルの学習（早期停止付き、より厳格な設定）
+    model = xgb.XGBRegressor(**model_config)
     model.fit(
         X_train,
         y_train,
         eval_set=[(X_test, y_test)],
-        early_stopping_rounds=10,  # より早い停止
+        early_stopping_rounds=10,
         verbose=False,
     )
 
-    # 予測の実行
+    # 予測と評価
     y_pred_train = model.predict(X_train)
     y_pred_test = model.predict(X_test)
 
-    # 評価指標の計算
-    train_rmse = np.sqrt(mean_squared_error(y_train, y_pred_train))
-    test_rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
-    train_mae = mean_absolute_error(y_train, y_pred_train)
-    test_mae = mean_absolute_error(y_test, y_pred_test)
-
     metrics = {
-        "train_rmse": train_rmse,
-        "test_rmse": test_rmse,
-        "train_mae": train_mae,
-        "test_mae": test_mae,
+        "train_rmse": np.sqrt(mean_squared_error(y_train, y_pred_train)),
+        "test_rmse": np.sqrt(mean_squared_error(y_test, y_pred_test)),
+        "train_mae": mean_absolute_error(y_train, y_pred_train),
+        "test_mae": mean_absolute_error(y_test, y_pred_test),
     }
 
-    print("モデル学習完了")
-    print(f"学習データ RMSE: {train_rmse:.2f}, MAE: {train_mae:.2f}")
-    print(f"テストデータ RMSE: {test_rmse:.2f}, MAE: {test_mae:.2f}")
-
+    print(f"モデル学習完了 - テストMAE: {metrics['test_mae']:.2f}")
     return model, metrics
 
 

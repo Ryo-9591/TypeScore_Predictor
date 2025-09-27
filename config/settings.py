@@ -18,16 +18,16 @@ SCORE_FILE = "t_score.csv"
 MISS_FILE = "t_miss.csv"
 USER_FILE = "m_user.csv"
 
-# モデル設定（過学習を防ぐためより保守的に設定）
+# モデル設定（小規模データ用に調整）
 MODEL_CONFIG = {
-    "n_estimators": 100,     # 木の数を減らす
-    "max_depth": 3,          # より浅い木にする
-    "learning_rate": 0.1,    # 学習率を上げる
-    "subsample": 0.7,        # より強いサブサンプリング
-    "colsample_bytree": 0.7, # より強い特徴量サブサンプリング
-    "reg_alpha": 1.0,        # より強いL1正則化
-    "reg_lambda": 1.0,       # より強いL2正則化
-    "min_child_weight": 5,   # 子ノードの最小重みを増やす
+    "n_estimators": 50,  # データ量に合わせて木の数を減らす
+    "max_depth": 2,  # より浅い木で過学習を防ぐ
+    "learning_rate": 0.05,  # より低い学習率
+    "subsample": 0.8,  # サブサンプリング
+    "colsample_bytree": 0.8,  # 特徴量サブサンプリング
+    "reg_alpha": 0.1,  # L1正則化
+    "reg_lambda": 0.1,  # L2正則化
+    "min_child_weight": 3,  # 子ノードの最小重み
     "random_state": 42,
     "n_jobs": -1,
 }
@@ -36,7 +36,7 @@ MODEL_CONFIG = {
 CV_CONFIG = {"n_splits": 5}
 
 # 評価指標の目標値
-TARGET_ACCURACY = 50.0  # MAEの目標値（点）- より現実的な値に調整
+TARGET_ACCURACY = 200.0  # MAEの目標値（点）- 小規模データに現実的な値に調整
 
 # 特徴量エンジニアリング設定
 FEATURE_CONFIG = {

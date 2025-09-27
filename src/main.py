@@ -11,8 +11,6 @@ TypeScore Predictor - メイン実行スクリプト
 
 import os
 import sys
-import pandas as pd
-import numpy as np
 from datetime import datetime
 
 # 自作モジュールのインポート
@@ -88,17 +86,31 @@ def main():
         df_final = prepare_data()
 
         # データの基本情報を表示
-        print(f"\nデータの基本情報:")
+        print("\nデータの基本情報:")
         print(f"  行数: {df_final.shape[0]:,}")
         print(f"  列数: {df_final.shape[1]}")
         print(f"  ユニークユーザー数: {df_final['user_id'].nunique()}")
+
+        # データの質をチェック
+        print("\nデータの質チェック:")
+        print(
+            f"  スコア範囲: {df_final['score'].min():.1f} - {df_final['score'].max():.1f}"
+        )
+        print(f"  スコア平均: {df_final['score'].mean():.1f}")
+        print(
+            f"  ミスタイプ範囲: {df_final['total_miss'].min():.1f} - {df_final['total_miss'].max():.1f}"
+        )
+        print(f"  ミスタイプ平均: {df_final['total_miss'].mean():.1f}")
+        print(
+            f"  ユーザーあたりの平均セッション数: {df_final.shape[0] / df_final['user_id'].nunique():.1f}"
+        )
 
         # 2. 特徴量エンジニアリング
         print("\n【ステップ2】特徴量エンジニアリング")
         print("-" * 50)
         X, y = engineer_features(df_final)
 
-        print(f"\n特徴量エンジニアリング結果:")
+        print("\n特徴量エンジニアリング結果:")
         print(f"  特徴量数: {X.shape[1]}")
         print(f"  サンプル数: {X.shape[0]:,}")
         print(f"  特徴量名: {list(X.columns)}")
