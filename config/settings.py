@@ -18,7 +18,7 @@ SCORE_FILE = "t_score.csv"
 MISS_FILE = "t_miss.csv"
 USER_FILE = "m_user.csv"
 
-# モデル設定（小規模データ用に調整）
+# モデル設定
 MODEL_CONFIG = {
     "n_estimators": 50,  # データ量に合わせて木の数を減らす
     "max_depth": 2,  # より浅い木で過学習を防ぐ

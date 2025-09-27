@@ -9,4 +9,4 @@ services:
       - ./output:/app/output
     environment:
       - PYTHONUNBUFFERED=1
-    command: python scripts/run_predictor.py
+    command: python src/main.py

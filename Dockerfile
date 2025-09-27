@@ -17,11 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードをコピー
 COPY src/ ./src/
 COPY config/ ./config/
-COPY scripts/ ./scripts/
 COPY data/ ./data/
 
 # データディレクトリの権限設定
 RUN chmod -R 755 /app/data
 
 # デフォルトコマンド
-CMD ["python", "scripts/run_predictor.py"]
+CMD ["python", "src/main.py"]
