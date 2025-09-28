@@ -48,6 +48,7 @@ analysis_service = AnalysisService()
 
 # グローバル変数（データキャッシュ用）
 cached_analysis_data = None
+cached_user_data = None  # ユーザーデータのキャッシュ
 
 
 def load_data_and_model():
@@ -70,9 +71,15 @@ def load_data_and_model():
 
 
 def get_user_data() -> Dict[str, Any]:
-    """ユーザーデータを取得"""
-    users = user_service.get_all_users()
-    return {"users": users}
+    """ユーザーデータを取得（キャッシュ機能付き）"""
+    global cached_user_data
+
+    if cached_user_data is None:
+        users = user_service.get_all_users()
+        cached_user_data = {"users": users}
+        logger.info(f"ユーザーデータをキャッシュに保存: {len(users)}人")
+
+    return cached_user_data
 
 
 def get_user_stats(user_id: str) -> Optional[Dict[str, Any]]:
@@ -281,6 +288,8 @@ app.layout = html.Div(
                         ),
                         html.Div(id="user-selector-container"),
                         html.Div(id="user-stats-display"),
+                        # ユーザー選択状態を保持するための隠しコンポーネント
+                        dcc.Store(id="selected-user-store", data=None),
                     ],
                     style=layout_styles["panel"],
                 ),
@@ -297,10 +306,10 @@ app.layout = html.Div(
             ],
             style=layout_styles["panel_container"],
         ),
-        # 自動更新
+        # 自動更新（グローバル統計のみ、ユーザー選択は独立）
         dcc.Interval(
             id="interval-component",
-            interval=30 * 1000,  # 30秒ごとに更新
+            interval=300 * 1000,  # 5分ごとに更新（グローバル統計のみ）
             n_intervals=0,
         ),
     ],
@@ -362,13 +371,12 @@ def update_global_stats(n: int) -> Tuple[List[html.Div], str]:
 @callback(
     [
         Output("user-selector-container", "children"),
-        Output("user-stats-display", "children"),
         Output("center-panel", "children"),
         Output("right-panel", "children"),
     ],
     [Input("interval-component", "n_intervals")],
 )
-def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div, html.Div]:
+def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div]:
     """パネルをレンダリング"""
     try:
         # データとモデルを読み込み
@@ -385,24 +393,8 @@ def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div, html.Div]:
         user_data = get_user_data()
         users = user_data["users"]
 
-        # ユーザー選択コンポーネントを作成
-        user_selector = UserSelector.create(users, users[0] if users else None)
-
-        # デフォルトユーザーを設定
-        selected_user = users[0] if users else None
-
-        # 選択されたユーザーの統計を取得
-        user_stats = None
-        if selected_user:
-            user_stats = get_user_stats(selected_user)
-
-        # ユーザー別パフォーマンスチャートを作成
-        fig_user = create_user_performance_chart(selected_user, user_stats)
-
-        # ユーザー統計情報の表示
-        user_stats_display = create_user_stats_display(
-            selected_user, user_stats, fig_user
-        )
+        # ユーザー選択コンポーネントを作成（デフォルト選択なし）
+        user_selector = UserSelector.create(users, None)
 
         # グラフオブジェクトを取得
         scatter_fig = None
@@ -422,14 +414,64 @@ def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div, html.Div]:
             analysis_data["metrics"], scatter_fig
         )
 
-        return user_selector, user_stats_display, center_panel, right_panel
+        return user_selector, center_panel, right_panel
 
     except Exception as e:
         error_div = html.Div(
             f"エラー: {str(e)}",
             style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
         )
-        return error_div, error_div, error_div, error_div
+        return error_div, error_div, error_div
+
+
+@callback(
+    [
+        Output("user-stats-display", "children"),
+        Output("selected-user-store", "data"),
+    ],
+    [Input("user-selector", "value")],
+)
+def update_user_display(selected_user: Optional[str]) -> Tuple[html.Div, str]:
+    """ユーザー選択時の表示更新"""
+    try:
+        if not selected_user:
+            return (
+                html.Div(
+                    [
+                        html.P(
+                            "ユーザーを選択してください",
+                            style={
+                                "color": "#cccccc",
+                                "textAlign": "center",
+                                "padding": "20px",
+                            },
+                        )
+                    ]
+                ),
+                None,
+            )
+
+        # 選択されたユーザーの統計を取得
+        user_stats = get_user_stats(selected_user)
+
+        # ユーザー別パフォーマンスチャートを作成
+        fig_user = create_user_performance_chart(selected_user, user_stats)
+
+        # ユーザー統計情報の表示
+        user_stats_display = create_user_stats_display(
+            selected_user, user_stats, fig_user
+        )
+
+        logger.info(f"ユーザー選択更新: {selected_user}")
+        return user_stats_display, selected_user
+
+    except Exception as e:
+        logger.error(f"ユーザー表示更新エラー: {e}")
+        error_div = html.Div(
+            f"エラー: {str(e)}",
+            style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
+        )
+        return error_div, selected_user
 
 
 # CSSスタイルを適用

@@ -67,8 +67,12 @@ def setup_logging():
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    # 予測精度レポート用ロガーの設定
+    # 予測精度レポート用ロガーの設定（日付付きファイル）
     if PREDICTION_REPORT_CONFIG["enabled"]:
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_file_pattern = str(PREDICTION_REPORT_CONFIG["file_pattern"])
+        prediction_log_file = Path(log_file_pattern.format(date=today))
+
         report_logger = logging.getLogger("prediction_report")
         report_logger.setLevel(getattr(logging, PREDICTION_REPORT_CONFIG["level"]))
 
@@ -91,7 +95,7 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, LOG_CONFIG["level"]))
 
-    print(f"ログ設定が完了しました。")
+    print("ログ設定が完了しました。")
     print(f"アプリケーションログ: {app_log_file}")
     print(f"予測精度レポートログ: {prediction_log_file}")
 

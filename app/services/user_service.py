@@ -21,19 +21,28 @@ class UserService:
         """ユーザーサービスの初期化"""
         self.data_processor = DataProcessor()
         self._cached_data = None
+        self._cached_users = None  # ユーザーリストのキャッシュ
+        self._user_stats_cache = {}  # ユーザー統計のキャッシュ
 
     def get_all_users(self) -> List[str]:
         """
-        全ユーザーのリストを取得
+        全ユーザーのリストを取得（キャッシュ機能付き）
 
         Returns:
             ユーザーIDのリスト
         """
         try:
+            # キャッシュから取得
+            if self._cached_users is not None:
+                return self._cached_users
+
             df = self._get_cached_data()
             users = sorted(
                 [str(user_id) for user_id in df["user_id"].unique().tolist()]
             )
+
+            # キャッシュに保存
+            self._cached_users = users
             logger.info(f"ユーザー一覧取得: {len(users)}人")
             return users
         except Exception as e:
@@ -42,7 +51,7 @@ class UserService:
 
     def get_user_stats(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
-        指定されたユーザーの統計データを取得
+        指定されたユーザーの統計データを取得（キャッシュ機能付き）
 
         Args:
             user_id: ユーザーID
@@ -51,6 +60,11 @@ class UserService:
             ユーザー統計データの辞書
         """
         try:
+            # キャッシュから取得
+            if user_id in self._user_stats_cache:
+                logger.info(f"ユーザー統計をキャッシュから取得: {user_id}")
+                return self._user_stats_cache[user_id]
+
             df = self._get_cached_data()
             user_data = df[df["user_id"].astype(str) == user_id]
 
@@ -92,6 +106,8 @@ class UserService:
                 "trend": trend,
             }
 
+            # キャッシュに保存
+            self._user_stats_cache[user_id] = stats
             logger.info(
                 f"ユーザー統計取得完了: {user_id}, セッション数={total_sessions}"
             )
@@ -236,6 +252,13 @@ class UserService:
             )
 
         return recommendations
+
+    def clear_cache(self):
+        """キャッシュをクリア"""
+        self._cached_data = None
+        self._cached_users = None
+        self._user_stats_cache = {}
+        logger.info("ユーザーサービスキャッシュをクリアしました")
 
     def get_users_performance_comparison(self, user_ids: List[str]) -> Dict[str, Any]:
         """

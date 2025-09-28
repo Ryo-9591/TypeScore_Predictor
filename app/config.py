@@ -55,10 +55,12 @@ LOG_CONFIG = {
     "retention": 30,  # 30日間保持
 }
 
-# 予測精度レポート用ログ設定
+# 予測精度レポート用ログ設定（日付付きファイルのみ）
 PREDICTION_REPORT_CONFIG = {
     "enabled": True,
-    "file": PROJECT_ROOT / "logs" / "prediction_report.log",
+    "file_pattern": PROJECT_ROOT
+    / "logs"
+    / "prediction_report_{date}.log",  # 日付付きパターン
     "format": "%(asctime)s - %(levelname)s - %(message)s",
     "level": "INFO",
     "rotation": "daily",  # 日次ローテーション

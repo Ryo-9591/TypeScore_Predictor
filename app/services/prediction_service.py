@@ -7,7 +7,6 @@ import numpy as np
 from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
-import json
 from pathlib import Path
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
@@ -21,9 +20,13 @@ logger = get_logger(__name__)
 report_logger = get_report_logger()
 report_logger.setLevel(logging.INFO)
 
-# ログファイルハンドラーの設定
+# ログファイルハンドラーの設定（日付付きファイル）
 if PREDICTION_REPORT_CONFIG["enabled"]:
-    log_file = PREDICTION_REPORT_CONFIG["file"]
+    from datetime import datetime
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    log_file_pattern = str(PREDICTION_REPORT_CONFIG["file_pattern"])
+    log_file = Path(log_file_pattern.format(date=today))
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     handler = logging.FileHandler(log_file, encoding="utf-8")

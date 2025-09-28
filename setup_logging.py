@@ -4,7 +4,6 @@
 予測精度レポート用のログディレクトリとファイルを作成
 """
 
-import os
 import logging
 from pathlib import Path
 from app.config import PROJECT_ROOT, PREDICTION_REPORT_CONFIG
@@ -25,9 +24,13 @@ def setup_logging():
 
     logger.info(f"ログディレクトリを作成しました: {logs_dir}")
 
-    # 予測精度レポート用ログファイルの作成
+    # 予測精度レポート用ログファイルの作成（日付付きファイル）
     if PREDICTION_REPORT_CONFIG["enabled"]:
-        report_log_file = PREDICTION_REPORT_CONFIG["file"]
+        from datetime import datetime
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_file_pattern = str(PREDICTION_REPORT_CONFIG["file_pattern"])
+        report_log_file = Path(log_file_pattern.format(date=today))
         report_log_file.parent.mkdir(parents=True, exist_ok=True)
 
         # ログファイルが存在しない場合は作成
