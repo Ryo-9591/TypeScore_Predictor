@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.core import DataProcessor
-from app.utils.common import get_logger, CacheManager, handle_error, get_jst_time
+from app.utils.common import get_logger, get_jst_time
 
 logger = get_logger(__name__)
 
@@ -15,36 +15,23 @@ class UserService:
     def __init__(self):
         """ユーザーサービスの初期化"""
         self.data_processor = DataProcessor()
-        self.cache_manager = CacheManager()
 
     def get_all_users(self) -> List[str]:
-        """全ユーザーのリストを取得（キャッシュ機能付き）"""
+        """全ユーザーのリストを取得"""
         try:
-            # キャッシュから取得
-            cached_users = self.cache_manager.get("users", max_age_seconds=600)
-            if cached_users is not None:
-                return cached_users
-
             df = self._get_cached_data()
             users = sorted([str(user_id) for user_id in df["user_id"].unique()])
 
-            # キャッシュに保存
-            self.cache_manager.set("users", users)
             logger.info(f"ユーザー一覧取得: {len(users)}人")
             return users
+
         except Exception as e:
             logger.error(f"ユーザー一覧取得エラー: {e}")
             return []
 
     def get_user_stats(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """指定されたユーザーの統計データを取得（キャッシュ機能付き）"""
+        """指定されたユーザーの統計データを取得"""
         try:
-            # キャッシュから取得
-            cache_key = f"user_stats_{user_id}"
-            cached_stats = self.cache_manager.get(cache_key, max_age_seconds=300)
-            if cached_stats is not None:
-                return cached_stats
-
             df = self._get_cached_data()
             user_data = df[df["user_id"].astype(str) == user_id]
 
@@ -63,8 +50,6 @@ class UserService:
                 "trend": "stable",
             }
 
-            # キャッシュに保存
-            self.cache_manager.set(cache_key, stats)
             logger.info(
                 f"ユーザー統計取得完了: {user_id}, セッション数={stats['total_sessions']}"
             )
@@ -189,17 +174,8 @@ class UserService:
             }
 
     def _get_cached_data(self) -> pd.DataFrame:
-        """キャッシュされたデータを取得"""
-        cached_data = self.cache_manager.get("processed_data", max_age_seconds=1800)
-        if cached_data is None:
-            cached_data = self.data_processor.get_processed_data()
-            self.cache_manager.set("processed_data", cached_data)
-        return cached_data
-
-    def clear_cache(self):
-        """キャッシュをクリア"""
-        self.cache_manager.clear()
-        logger.info("ユーザーサービスキャッシュをクリアしました")
+        """処理済みデータを取得"""
+        return self.data_processor.get_processed_data()
 
     def get_users_performance_comparison(self, user_ids: List[str]) -> Dict[str, Any]:
         """

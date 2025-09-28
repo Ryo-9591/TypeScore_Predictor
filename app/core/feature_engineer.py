@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, List, Dict
 
-from app.utils.common import get_logger, log_execution_time
+from app.utils.common import get_logger
 
 logger = get_logger(__name__)
 
@@ -15,7 +15,6 @@ class FeatureEngineer:
         self.feature_names = []
         self.feature_stats = {}
 
-    @log_execution_time
     def create_features(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """特徴量を作成して機械学習用のデータセットを生成"""
         logger.info(f"特徴量エンジニアリング開始: {df.shape}")

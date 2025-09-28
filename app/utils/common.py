@@ -1,21 +1,9 @@
-import sys
-from pathlib import Path
 import logging
 from datetime import datetime
 import pytz
 from typing import Any, Dict, Optional, Union, List
 import numpy as np
 import pandas as pd
-
-# プロジェクトルートをPythonパスに追加
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-# Docker環境での追加パス設定
-APP_ROOT = Path(__file__).parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
 # 共通インポート
 COMMON_IMPORTS = {
@@ -94,57 +82,6 @@ def convert_numpy_types(obj: Any) -> Any:
         return obj
 
 
-# 共通キャッシュ管理
-class CacheManager:
-    """共通キャッシュ管理クラス"""
-
-    def __init__(self):
-        self._cache = {}
-        self._timestamps = {}
-
-    def get(self, key: str, max_age_seconds: int = 300) -> Optional[Any]:
-        """キャッシュから値を取得"""
-        if key not in self._cache:
-            return None
-
-        # 期限チェック
-        if key in self._timestamps:
-            age = (datetime.now() - self._timestamps[key]).total_seconds()
-            if age > max_age_seconds:
-                self.clear(key)
-                return None
-
-        return self._cache[key]
-
-    def set(self, key: str, value: Any) -> None:
-        """キャッシュに値を設定"""
-        self._cache[key] = value
-        self._timestamps[key] = datetime.now()
-
-    def clear(self, key: Optional[str] = None) -> None:
-        """キャッシュをクリア"""
-        if key:
-            self._cache.pop(key, None)
-            self._timestamps.pop(key, None)
-        else:
-            self._cache.clear()
-            self._timestamps.clear()
-
-    def clear_expired(self, max_age_seconds: int = 300) -> int:
-        """期限切れのキャッシュをクリア"""
-        now = datetime.now()
-        expired_keys = []
-
-        for key, timestamp in self._timestamps.items():
-            if (now - timestamp).total_seconds() > max_age_seconds:
-                expired_keys.append(key)
-
-        for key in expired_keys:
-            self.clear(key)
-
-        return len(expired_keys)
-
-
 # 共通データ処理
 def safe_dataframe_operation(
     df: pd.DataFrame, operation: str, **kwargs
@@ -180,13 +117,10 @@ def validate_dataframe(df: pd.DataFrame, required_columns: List[str]) -> bool:
 # 共通設定アクセス
 def get_config_value(key: str, default: Any = None) -> Any:
     """設定値を安全に取得"""
-    try:
-        from app.config import globals
+    from app.config import globals
 
-        config = globals()
-        return config.get(key, default)
-    except ImportError:
-        return default
+    config = globals()
+    return config.get(key, default)
 
 
 # 共通メトリクス計算
@@ -220,35 +154,3 @@ def get_common_styles() -> Dict[str, Dict[str, Any]]:
             "info": "#17a2b8",
         },
     }
-
-
-# デコレータ
-def cached_property(func):
-    """キャッシュ付きプロパティデコレータ"""
-    attr_name = f"_cached_{func.__name__}"
-
-    def wrapper(self):
-        if not hasattr(self, attr_name):
-            setattr(self, attr_name, func(self))
-        return getattr(self, attr_name)
-
-    return property(wrapper)
-
-
-def log_execution_time(func):
-    """実行時間をログ出力するデコレータ"""
-
-    def wrapper(*args, **kwargs):
-        logger = get_logger(func.__module__)
-        start_time = datetime.now()
-        try:
-            result = func(*args, **kwargs)
-            execution_time = (datetime.now() - start_time).total_seconds()
-            logger.info(f"{func.__name__} 実行時間: {execution_time:.2f}秒")
-            return result
-        except Exception as e:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            logger.error(f"{func.__name__} エラー ({execution_time:.2f}秒): {e}")
-            raise
-
-    return wrapper

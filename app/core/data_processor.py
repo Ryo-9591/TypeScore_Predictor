@@ -5,10 +5,8 @@ from typing import Dict, Any
 
 from app.utils.common import (
     get_logger,
-    handle_error,
     validate_dataframe,
     safe_dataframe_operation,
-    cached_property,
 )
 
 logger = get_logger(__name__)
@@ -174,7 +172,6 @@ class DataProcessor:
 
         return df
 
-    @cached_property
     def processed_data(self) -> pd.DataFrame:
         """処理済みデータを取得（キャッシュ機能付き）"""
         if self._cached_data is None:
@@ -184,7 +181,7 @@ class DataProcessor:
 
     def get_processed_data(self) -> pd.DataFrame:
         """処理済みデータを取得（互換性のため）"""
-        return self.processed_data
+        return self.processed_data()
 
     def get_data_info(self) -> Dict[str, Any]:
         """データの基本情報を取得"""
