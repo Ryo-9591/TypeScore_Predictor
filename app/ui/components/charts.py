@@ -78,6 +78,88 @@ class PredictionChart:
         return fig
 
     @staticmethod
+    def create_user_scatter_plot(user_predictions: pd.DataFrame) -> go.Figure:
+        """
+        ユーザー別最新スコアの散布図を作成
+
+        Args:
+            user_predictions: ユーザー別予測結果のDataFrame
+
+        Returns:
+            PlotlyのFigureオブジェクト
+        """
+        logger.info("ユーザー別最新スコアの散布図を作成中...")
+
+        fig = go.Figure()
+
+        # 散布図の追加
+        fig.add_trace(
+            go.Scatter(
+                x=user_predictions["actual_score"],
+                y=user_predictions["predicted_score"],
+                mode="markers",
+                marker=dict(
+                    size=12,
+                    opacity=0.7,
+                    color="#28a745",
+                    line=dict(color="#ffffff", width=2),
+                ),
+                name="ユーザー別最新スコア",
+                text=[
+                    f"ユーザー: {uid}<br>プレイ回数: {count}回"
+                    for uid, count in zip(
+                        user_predictions["user_id"], user_predictions["play_count"]
+                    )
+                ],
+                hovertemplate="<b>%{text}</b><br>実測スコア: %{x}<br>予測スコア: %{y}<extra></extra>",
+            )
+        )
+
+        # 理想的な予測線（y=x）を追加
+        min_val = min(
+            user_predictions["actual_score"].min(),
+            user_predictions["predicted_score"].min(),
+        )
+        max_val = max(
+            user_predictions["actual_score"].max(),
+            user_predictions["predicted_score"].max(),
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[min_val, max_val],
+                y=[min_val, max_val],
+                mode="lines",
+                line=dict(color="#dc3545", width=3, dash="dash"),
+                name="理想的な予測線",
+            )
+        )
+
+        # 相関係数を計算して表示
+        correlation = user_predictions["actual_score"].corr(
+            user_predictions["predicted_score"]
+        )
+
+        fig.update_layout(
+            xaxis_title="実測スコア（最新）",
+            yaxis_title="予測スコア",
+            title=f"ユーザー別最新スコア予測精度 (相関: {correlation:.3f})",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff", size=10),
+            title_font=dict(color="#ffffff", size=14),
+            margin=dict(l=60, r=20, t=80, b=40),
+            autosize=True,
+            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
+            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
+        )
+
+        logger.info(
+            f"ユーザー別最新スコア散布図を作成しました: {len(user_predictions)}ユーザー"
+        )
+        return fig
+
+    @staticmethod
     def create_panel(
         scatter_fig: go.Figure = None, metrics: Dict[str, Any] = None
     ) -> html.Div:

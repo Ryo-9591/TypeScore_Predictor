@@ -40,10 +40,13 @@ class AnalysisService:
             # モデル学習
             model, metrics = self.model_trainer.train_model(X, y)
 
-            # 予測結果の可視化
-            y_pred = model.predict(X.iloc[-int(len(X) * 0.2) :])  # テストデータの予測
-            y_test = y.iloc[-int(len(y) * 0.2) :]
-            scatter_fig = PredictionChart.create_scatter_plot(y_test, y_pred, metrics)
+            # ユーザー別最新スコアの予測
+            user_latest_predictions = self._get_user_latest_predictions(
+                df, model, X.columns
+            )
+            user_scatter_fig = PredictionChart.create_user_scatter_plot(
+                user_latest_predictions
+            )
 
             # 特徴量重要度分析
             importance_fig = FeatureImportanceChart.create_from_model(model, X.columns)
@@ -73,7 +76,9 @@ class AnalysisService:
                 },
                 "data_info": data_info,
                 "feature_importance": dict(zip(X.columns, model.feature_importances_)),
-                "scatter_fig": scatter_fig.to_dict() if scatter_fig else None,
+                "user_scatter_fig": user_scatter_fig.to_dict()
+                if user_scatter_fig
+                else None,
                 "importance_fig": importance_fig.to_dict() if importance_fig else None,
                 "evaluation": evaluation,
                 "timestamp": datetime.now().isoformat(),
@@ -94,6 +99,45 @@ class AnalysisService:
                 "execution_time": (datetime.now() - start_time).total_seconds(),
                 "timestamp": datetime.now().isoformat(),
             }
+
+    def _get_user_latest_predictions(
+        self, df: pd.DataFrame, model, feature_columns
+    ) -> pd.DataFrame:
+        """各ユーザーの最新スコアと予測値を取得"""
+        logger.info("ユーザー別最新スコアの予測を計算中...")
+
+        try:
+            # ユーザー別に最新のレコードを取得
+            user_latest = df.sort_values("created_at").groupby("user_id").tail(1).copy()
+
+            # 特徴量エンジニアリング
+            feature_engineer = FeatureEngineer()
+            X_latest, y_latest = feature_engineer.create_features(user_latest)
+
+            # 予測実行
+            y_pred_latest = model.predict(X_latest)
+
+            # ユーザー別のプレイ回数を計算
+            user_play_counts = df.groupby("user_id").size()
+
+            # 結果をまとめる
+            result_df = pd.DataFrame(
+                {
+                    "user_id": user_latest["user_id"].values,
+                    "actual_score": y_latest.values,
+                    "predicted_score": y_pred_latest,
+                    "play_count": [
+                        user_play_counts[uid] for uid in user_latest["user_id"].values
+                    ],
+                }
+            )
+
+            logger.info(f"ユーザー別最新スコア予測完了: {len(result_df)}ユーザー")
+            return result_df
+
+        except Exception as e:
+            logger.error(f"ユーザー別最新スコア予測エラー: {e}")
+            raise
 
     def get_cached_analysis(self) -> Optional[Dict[str, Any]]:
         """

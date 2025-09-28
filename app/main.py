@@ -385,11 +385,11 @@ def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div]:
         user_selector = UserSelector.create(users, default_user)
 
         # グラフオブジェクトを取得
-        scatter_fig = None
+        user_scatter_fig = None
         importance_fig = None
 
-        if "scatter_fig" in analysis_data and analysis_data["scatter_fig"]:
-            scatter_fig = go.Figure(analysis_data["scatter_fig"])
+        if "user_scatter_fig" in analysis_data and analysis_data["user_scatter_fig"]:
+            user_scatter_fig = go.Figure(analysis_data["user_scatter_fig"])
 
         if "importance_fig" in analysis_data and analysis_data["importance_fig"]:
             importance_fig = go.Figure(analysis_data["importance_fig"])
@@ -399,7 +399,7 @@ def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div]:
             analysis_data["feature_importance"], importance_fig
         )
         right_panel = create_prediction_accuracy_panel(
-            analysis_data["metrics"], scatter_fig
+            analysis_data["metrics"], user_scatter_fig
         )
 
         return user_selector, center_panel, right_panel

@@ -50,6 +50,7 @@ class DataProcessor:
 
             # クリーニング処理を順次実行
             cleaning_steps = [
+                ("ユーザーフィルタリング", self._filter_users_by_play_count),
                 ("数値データクリーニング", self._clean_numeric_data),
                 ("欠損値処理", self._handle_missing_values),
                 ("日時変換", self._convert_datetime),
@@ -121,6 +122,63 @@ class DataProcessor:
             import traceback
 
             logger.error(f"詳細エラー: {traceback.format_exc()}")
+            raise
+
+    def _filter_users_by_play_count(
+        self, df: pd.DataFrame, min_play_count: int = 10
+    ) -> pd.DataFrame:
+        """プレイ回数が指定回数未満のユーザーを除外"""
+        logger.info(f"プレイ回数{min_play_count}回未満のユーザーをフィルタリング中...")
+
+        try:
+            # ユーザー別のプレイ回数を計算
+            user_play_counts = (
+                df.groupby("user_id").size().reset_index(name="play_count")
+            )
+
+            # フィルタリング前の統計
+            total_users_before = df["user_id"].nunique()
+            total_records_before = len(df)
+
+            logger.info(
+                f"フィルタリング前: {total_users_before}ユーザー, {total_records_before}レコード"
+            )
+
+            # プレイ回数が指定回数以上のユーザーを取得
+            valid_users = user_play_counts[
+                user_play_counts["play_count"] >= min_play_count
+            ]["user_id"]
+
+            # データをフィルタリング
+            df_filtered = df[df["user_id"].isin(valid_users)].copy()
+
+            # フィルタリング後の統計
+            total_users_after = df_filtered["user_id"].nunique()
+            total_records_after = len(df_filtered)
+
+            logger.info(
+                f"フィルタリング後: {total_users_after}ユーザー, {total_records_after}レコード"
+            )
+            logger.info(
+                f"除外されたユーザー: {total_users_before - total_users_after}人"
+            )
+            logger.info(
+                f"除外されたレコード: {total_records_before - total_records_after}件"
+            )
+
+            # 除外されたユーザーの詳細ログ
+            excluded_users = user_play_counts[
+                user_play_counts["play_count"] < min_play_count
+            ]
+            if len(excluded_users) > 0:
+                logger.info("除外されたユーザーのプレイ回数分布:")
+                for _, row in excluded_users.iterrows():
+                    logger.info(f"  ユーザー {row['user_id']}: {row['play_count']}回")
+
+            return df_filtered
+
+        except Exception as e:
+            logger.error(f"ユーザーフィルタリングエラー: {e}")
             raise
 
     def _clean_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
