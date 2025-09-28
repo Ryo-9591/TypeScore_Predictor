@@ -25,7 +25,11 @@ class PredictionChart:
         return html.Div(
             [
                 html.H3("予測精度分析", className="chart-title"),
-                dcc.Graph(figure=fig_prediction, className="chart-graph"),
+                dcc.Graph(
+                    figure=fig_prediction,
+                    className="chart-graph",
+                    config={"displayModeBar": True, "responsive": True},
+                ),
             ],
             className="chart-panel",
         )
@@ -123,7 +127,11 @@ class FeatureImportanceChart:
         return html.Div(
             [
                 html.H3("特徴量重要度分析", className="chart-title"),
-                dcc.Graph(figure=fig_feature, className="chart-graph"),
+                dcc.Graph(
+                    figure=fig_feature,
+                    className="chart-graph",
+                    config={"displayModeBar": True, "responsive": True},
+                ),
             ],
             className="chart-panel",
         )
@@ -153,7 +161,7 @@ class FeatureImportanceChart:
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#ffffff", size=10),
             title_font=dict(color="#ffffff", size=14),
-            margin=dict(l=80, r=40, t=60, b=40),
+            margin=dict(l=60, r=20, t=50, b=30),
             autosize=True,
         )
         return fig
@@ -243,7 +251,7 @@ class UserPerformanceChart:
                 tickcolor="#666",
                 showticklabels=True,
             ),
-            margin=dict(l=40, r=40, t=60, b=80),
+            margin=dict(l=50, r=20, t=40, b=50),
             autosize=True,
         )
 
@@ -256,8 +264,8 @@ class UserPerformanceChart:
             [
                 dcc.Graph(
                     figure=fig_user,
-                    style={"height": "calc(100% - 50px)", "width": "100%"},
+                    style={"height": "100%", "width": "100%"},
                 ),
             ],
-            style={"height": "100%", "display": "flex", "flexDirection": "column"},
+            style={"height": "100%"},
         )

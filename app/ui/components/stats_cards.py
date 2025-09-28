@@ -239,11 +239,13 @@ class StatsCard:
                     },
                 ),
             ],
+            className="user-stats-card",
             style={
                 "display": "flex",
                 "flexDirection": "column",
                 "width": "100%",
-                "marginBottom": "15px",
+                "marginBottom": "10px",
+                "minHeight": "90px",
             },
         )
 

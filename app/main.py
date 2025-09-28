@@ -143,8 +143,7 @@ def create_user_stats_display(
                     [user_chart],
                     style={
                         "width": "100%",
-                        "height": "450px",
-                        "overflow": "hidden",
+                        "height": "400px",
                     },
                 ),
             ],
@@ -152,8 +151,6 @@ def create_user_stats_display(
                 "display": "flex",
                 "flexDirection": "column",
                 "width": "100%",
-                "overflow": "hidden",
-                "boxSizing": "border-box",
             },
         )
 
@@ -167,9 +164,7 @@ def create_user_stats_display(
                 [user_chart],
                 style={
                     "width": "100%",
-                    "height": "450px",
-                    "marginTop": "15px",
-                    "overflow": "hidden",
+                    "height": "400px",
                 },
             ),
         ],
@@ -177,9 +172,6 @@ def create_user_stats_display(
             "display": "flex",
             "flexDirection": "column",
             "width": "100%",
-            "marginBottom": "15px",
-            "overflow": "hidden",  # コンテンツがはみ出さないように
-            "boxSizing": "border-box",  # パディングとボーダーを含めたサイズ計算
         },
     )
 
@@ -270,8 +262,8 @@ app.layout = html.Div(
                             "ユーザースコア推移と予測",
                             style={
                                 "color": "#ffffff",
-                                "marginBottom": "15px",
-                                "fontSize": "18px",
+                                "marginBottom": "8px",
+                                "fontSize": "16px",
                                 "textAlign": "center",
                             },
                         ),

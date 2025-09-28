@@ -88,7 +88,7 @@ LAYOUT_STYLES = {
     "user_container": {
         "backgroundColor": "#2d2d2d",
         "borderRadius": "8px",
-        "padding": "12px",
+        "padding": "8px",
         "flex": "1",
         "minWidth": "300px",
         "overflow": "hidden",
@@ -175,6 +175,11 @@ body {
     text-align: center;
 }
 
+.user-stats-card {
+    padding: 12px;
+    text-align: center;
+}
+
 .panel {
     padding: 12px;
     height: 100%;
@@ -198,7 +203,10 @@ body {
 
 .chart-graph {
     height: calc(100% - 50px);
+    min-height: 250px;
     width: 100%;
+    flex: 1;
+    overflow: visible;
 }
 
 /* テキストスタイル */
