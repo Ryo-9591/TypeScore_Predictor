@@ -15,7 +15,11 @@ class StatsCard:
 
     @staticmethod
     def create(
-        title: str, value: str, description: str, color: str = "#007bff"
+        title: str,
+        value: str,
+        description: str,
+        color: str = "#007bff",
+        size: str = "normal",  # "small", "normal", "large"
     ) -> html.Div:
         """
         統計カードを作成
@@ -25,17 +29,42 @@ class StatsCard:
             value: 表示する値
             description: 説明文
             color: 値の色
+            size: カードサイズ ("small", "normal", "large")
 
         Returns:
             DashのDivコンポーネント
         """
+        # サイズに応じたスタイル設定
+        size_config = {
+            "small": {
+                "padding": "15px",
+                "titleFontSize": "12px",
+                "valueFontSize": "22px",
+                "descFontSize": "11px",
+            },
+            "normal": {
+                "padding": "20px",
+                "titleFontSize": "14px",
+                "valueFontSize": "28px",
+                "descFontSize": "12px",
+            },
+            "large": {
+                "padding": "25px",
+                "titleFontSize": "16px",
+                "valueFontSize": "32px",
+                "descFontSize": "13px",
+            },
+        }
+
+        config = size_config.get(size, size_config["normal"])
+
         return html.Div(
             [
                 html.H3(
                     title,
                     style={
                         "color": "#ffffff",
-                        "fontSize": "14px",
+                        "fontSize": config["titleFontSize"],
                         "margin": "0 0 5px 0",
                         "fontWeight": "500",
                         "textTransform": "uppercase",
@@ -46,7 +75,7 @@ class StatsCard:
                     value,
                     style={
                         "color": color,
-                        "fontSize": "28px",
+                        "fontSize": config["valueFontSize"],
                         "margin": "0 0 8px 0",
                         "fontWeight": "700",
                     },
@@ -55,7 +84,7 @@ class StatsCard:
                     description,
                     style={
                         "color": "#cccccc",
-                        "fontSize": "12px",
+                        "fontSize": config["descFontSize"],
                         "margin": "0",
                         "opacity": "0.8",
                     },
@@ -66,10 +95,10 @@ class StatsCard:
                 "backgroundColor": "#2d2d2d",
                 "border": "1px solid #444",
                 "borderRadius": "12px",
-                "padding": "20px",
+                "padding": config["padding"],
                 "textAlign": "center",
                 "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)",
-                "transition": "transform 0.2s ease, box-shadow 0.2s ease",
+                # ホバー効果とトランジションを削除
             },
         )
 

@@ -68,60 +68,59 @@ LAYOUT_STYLES = {
     "main_container": {
         "backgroundColor": "#1a1a1a",
         "height": "100vh",
-        "padding": "15px",
+        "padding": "10px",
         "overflow": "hidden",
+        "display": "flex",
+        "flexDirection": "column",
+        "boxSizing": "border-box",
     },
     "header": {
         "display": "flex",
         "justifyContent": "space-between",
         "alignItems": "center",
-        "marginBottom": "20px",
-        "padding": "0 10px",
+        "marginBottom": "15px",
+        "padding": "0 5px",
+        "flex": "0 0 auto",
     },
-    "stats_grid": {
+    "stats_container": {
         "display": "grid",
         "gridTemplateColumns": "1fr 1fr 1fr 1fr",
         "gridTemplateRows": "1fr",
-        "gap": "15px",
-        "marginBottom": "20px",
+        "gap": "10px",
+        "marginBottom": "15px",
+        "flex": "0 0 auto",
     },
-    "panel_container": {
-        "display": "flex",
-        "gap": "15px",
-        "height": "calc(100vh - 400px)",
-    },
-    "panel": {
+    "user_container": {
         "backgroundColor": "#2d2d2d",
         "borderRadius": "8px",
-        "padding": "15px",
-        "flex": "1",
-    },
-    # 新しいレイアウト用のスタイル
-    "left_panel": {
-        "backgroundColor": "#2d2d2d",
-        "borderRadius": "8px",
-        "padding": "15px",
-        "flex": "0 0 30%",  # 30%の幅で固定
-        "height": "100%",
-        "minWidth": "300px",  # 最小幅を設定
-        "maxWidth": "30%",  # 最大幅も設定
-        "overflow": "hidden",  # コンテンツがはみ出さないように
-    },
-    "right_panel_container": {
-        "flex": "1",  # 残りの幅を使用
-        "height": "100%",
+        "padding": "12px",
+        "flex": "0 0 30%",
+        "minWidth": "300px",
+        "maxWidth": "30%",
+        "overflow": "hidden",
         "display": "flex",
         "flexDirection": "column",
-        "gap": "15px",
-        "minWidth": "0",  # フレックスアイテムの最小幅を0に設定
     },
-    "right_panel": {
+    "analysis_container": {
+        "flex": "1",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "10px",
+        "minWidth": "0",
+    },
+    "analysis_panel": {
         "backgroundColor": "#2d2d2d",
         "borderRadius": "8px",
-        "padding": "15px",
-        "flex": "1",  # 縦に均等に分割
-        "overflow": "hidden",  # コンテンツがはみ出さないように
-        "boxSizing": "border-box",  # パディングとボーダーを含めたサイズ計算
+        "padding": "12px",
+        "flex": "1",
+        "overflow": "hidden",
+        "boxSizing": "border-box",
+    },
+    "bottom_container": {
+        "display": "flex",
+        "gap": "10px",
+        "flex": "1",
+        "minHeight": "0",
     },
 }
 
@@ -131,14 +130,9 @@ COMPONENT_STYLES = {
         "backgroundColor": "#2d2d2d",
         "border": "1px solid #444",
         "borderRadius": "12px",
-        "padding": "20px",
+        "padding": "15px",
         "textAlign": "center",
         "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)",
-        "transition": "transform 0.2s ease, box-shadow 0.2s ease",
-    },
-    "stats_card_hover": {
-        "transform": "translateY(-2px)",
-        "boxShadow": "0 6px 12px rgba(0, 0, 0, 0.4)",
     },
     "dropdown": {
         "backgroundColor": "#3d3d3d",
@@ -161,9 +155,6 @@ COMPONENT_STYLES = {
         "padding": "10px",
         "cursor": "pointer",
     },
-    "button_hover": {
-        "backgroundColor": "#0056b3",
-    },
 }
 
 # CSSスタイル文字列
@@ -182,19 +173,13 @@ body {
     background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
     border: 1px solid #444;
     border-radius: 12px;
-    padding: 20px;
+    padding: 15px;
     text-align: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
 }
 
 .stats-card h3 {
-    margin: 0 0 10px 0;
+    margin: 0 0 8px 0;
     font-size: 14px;
     font-weight: 500;
     color: #ffffff;
@@ -203,7 +188,7 @@ body {
 }
 
 .stats-card h2 {
-    margin: 0 0 8px 0;
+    margin: 0 0 6px 0;
     font-size: 28px;
     font-weight: 700;
 }
@@ -220,7 +205,7 @@ body {
     background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
     border: 1px solid #444;
     border-radius: 12px;
-    padding: 20px;
+    padding: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     height: 100%;
     display: flex;
@@ -230,9 +215,9 @@ body {
 /* ヘッダーのスタイル */
 .dashboard-header {
     background: linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%);
-    padding: 20px;
+    padding: 15px;
     border-radius: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 

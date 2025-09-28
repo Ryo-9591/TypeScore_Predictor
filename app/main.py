@@ -281,15 +281,15 @@ app.layout = html.Div(
             ],
             style=layout_styles["header"],
         ),
-        # グローバル統計カード（4x1グリッド）
+        # ①統計カードのコンテナ（4つのカード）
         html.Div(
             id="global-stats-grid",
-            style=layout_styles["stats_grid"],
+            style=layout_styles["stats_container"],
         ),
-        # 下部パネル（3:7の比率で配置）
+        # 下部全体のコンテナ
         html.Div(
             [
-                # 左パネル：ユーザー選択と最新データ（30%）
+                # ②下部左のユーザー選択と最新データコンテナ
                 html.Div(
                     [
                         html.H3(
@@ -306,26 +306,26 @@ app.layout = html.Div(
                         # ユーザー選択状態を保持するための隠しコンポーネント
                         dcc.Store(id="selected-user-store", data=None),
                     ],
-                    style=layout_styles["left_panel"],
+                    style=layout_styles["user_container"],
                 ),
-                # 右側コンテナ：特徴量重要度と予測精度分析（70%、縦に積む）
+                # ③特徴量重要度分析・予測精度分析コンテナ（2つのカード）
                 html.Div(
                     [
                         # 上部：特徴量重要度分析
                         html.Div(
                             id="center-panel",
-                            style=layout_styles["right_panel"],
+                            style=layout_styles["analysis_panel"],
                         ),
-                        # 下部：予測値VS実測
+                        # 下部：予測精度分析
                         html.Div(
                             id="right-panel",
-                            style=layout_styles["right_panel"],
+                            style=layout_styles["analysis_panel"],
                         ),
                     ],
-                    style=layout_styles["right_panel_container"],
+                    style=layout_styles["analysis_container"],
                 ),
             ],
-            style=layout_styles["panel_container"],
+            style=layout_styles["bottom_container"],
         ),
         # 自動更新（グローバル統計のみ、ユーザー選択は独立）
         dcc.Interval(
