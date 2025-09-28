@@ -65,22 +65,6 @@ class PredictionChart:
             )
         )
 
-        # ダークテーマを適用
-        title_text = f"予測スコア vs 実測スコア<br>RMSE: {metrics['test_rmse']:.2f}, MAE: {metrics['test_mae']:.2f}"
-        fig.update_layout(
-            title=title_text,
-            xaxis_title="実測スコア",
-            yaxis_title="予測スコア",
-            height=400,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
         logger.info("予測散布図を作成しました")
         return fig
 
@@ -101,47 +85,23 @@ class PredictionChart:
         if scatter_fig is not None:
             fig_prediction = scatter_fig
         else:
-            # フォールバック: ダミーデータで散布図を作成
+            # データが取得できない場合は空のグラフを作成
             fig_prediction = go.Figure()
-            np.random.seed(42)
-            actual_scores = np.random.normal(4000, 1500, 100)
-            predicted_scores = actual_scores + np.random.normal(
-                0, metrics.get("test_rmse", 200) if metrics else 200, 100
+            fig_prediction.add_annotation(
+                text="データを取得できませんでした",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=16, color="#cccccc"),
             )
-
-            fig_prediction.add_trace(
-                go.Scatter(
-                    x=actual_scores,
-                    y=predicted_scores,
-                    mode="markers",
-                    name="予測 vs 実測",
-                    marker=dict(color="blue", size=6, opacity=0.6),
-                )
-            )
-
-            # 完璧な予測線
-            min_val = min(actual_scores.min(), predicted_scores.min())
-            max_val = max(actual_scores.max(), predicted_scores.max())
-            fig_prediction.add_trace(
-                go.Scatter(
-                    x=[min_val, max_val],
-                    y=[min_val, max_val],
-                    mode="lines",
-                    name="完璧な予測",
-                    line=dict(color="red", dash="dash"),
-                )
-            )
-
             fig_prediction.update_layout(
-                title="予測スコア vs 実測スコア",
-                xaxis_title="実測スコア",
-                yaxis_title="予測スコア",
-                height=400,
-                font=dict(color="white"),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(gridcolor="#444"),
-                yaxis=dict(gridcolor="#444"),
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                autosize=True,
             )
 
         return html.Div(
@@ -150,13 +110,17 @@ class PredictionChart:
                     "予測精度分析",
                     style={
                         "color": "#ffffff",
-                        "marginBottom": "15px",
-                        "fontSize": "18px",
+                        "marginBottom": "10px",
+                        "fontSize": "16px",
                         "textAlign": "center",
                     },
                 ),
-                dcc.Graph(figure=fig_prediction, style={"height": "calc(100% - 60px)"}),
-            ]
+                dcc.Graph(
+                    figure=fig_prediction,
+                    style={"height": "calc(100% - 50px)", "width": "100%"},
+                ),
+            ],
+            style={"height": "100%", "display": "flex", "flexDirection": "column"},
         )
 
 
@@ -209,33 +173,6 @@ class FeatureImportanceChart:
             ]
         )
 
-        # ダークテーマを適用
-        title_text = f"特徴量重要度（上位{top_n}個）"
-        fig.update_layout(
-            title=title_text,
-            height=max(400, len(top_features) * 40),
-            width=800,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(
-                title_text="重要度",
-                gridcolor="#444",
-                linecolor="#666",
-                tickcolor="#666",
-                title_font=dict(color="#ffffff", size=14),
-            ),
-            yaxis=dict(
-                title_text="特徴量",
-                gridcolor="#444",
-                linecolor="#666",
-                tickcolor="#666",
-                title_font=dict(color="#ffffff", size=14),
-            ),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
         logger.info("特徴量重要度チャートを作成しました")
         return fig
 
@@ -274,15 +211,33 @@ class FeatureImportanceChart:
                 color_continuous_scale="viridis",
             )
             fig_feature.update_layout(
-                height=400,
                 yaxis={"categoryorder": "total ascending"},
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#ffffff", size=12),
-                title_font=dict(color="#ffffff", size=16),
+                font=dict(color="#ffffff", size=10),
+                title_font=dict(color="#ffffff", size=14),
+                margin=dict(l=80, r=40, t=60, b=40),
+                autosize=True,
             )
         else:
+            # データが取得できない場合は空のグラフを作成
             fig_feature = go.Figure()
+            fig_feature.add_annotation(
+                text="データを取得できませんでした",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=16, color="#cccccc"),
+            )
+            fig_feature.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                autosize=True,
+            )
 
         return html.Div(
             [
@@ -290,13 +245,17 @@ class FeatureImportanceChart:
                     "特徴量重要度分析",
                     style={
                         "color": "#ffffff",
-                        "marginBottom": "15px",
-                        "fontSize": "18px",
+                        "marginBottom": "10px",
+                        "fontSize": "16px",
                         "textAlign": "center",
                     },
                 ),
-                dcc.Graph(figure=fig_feature, style={"height": "calc(100% - 60px)"}),
-            ]
+                dcc.Graph(
+                    figure=fig_feature,
+                    style={"height": "calc(100% - 50px)", "width": "100%"},
+                ),
+            ],
+            style={"height": "100%", "display": "flex", "flexDirection": "column"},
         )
 
 
@@ -321,33 +280,16 @@ class UserPerformanceChart:
 
         if selected_user and user_stats:
             # 時系列データがある場合は実際のデータを使用
-            # ここでは簡易的に統計データからチャートを作成
             fig_user.add_trace(
                 go.Scatter(
                     x=["過去", "現在"],
                     y=[user_stats["avg_score"], user_stats["latest_score"]],
                     mode="lines+markers",
-                    name=f"ユーザー {selected_user}",
+                    name=f"{selected_user}",
                     line=dict(color="#007bff", width=3),
-                    marker=dict(size=8, color="#007bff"),
+                    marker=dict(size=8, color="#ffffff"),
                 )
             )
-
-        # ダークテーマを適用
-        fig_user.update_layout(
-            title="ユーザーパフォーマンス",
-            xaxis_title="日時",
-            yaxis_title="スコア",
-            width=800,
-            height=400,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
 
         return fig_user
 
@@ -381,18 +323,29 @@ class UserPerformanceChart:
 
         # ダークテーマを適用
         fig_user.update_layout(
-            title="ユーザーパフォーマンス",
-            xaxis_title="日時",
-            yaxis_title="スコア",
-            width=800,
-            height=400,
+            xaxis_title="",
+            yaxis_title="",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
+            font=dict(color="#ffffff", size=10),
+            title_font=dict(color="#ffffff", size=14),
+            xaxis=dict(
+                gridcolor="#444",
+                linecolor="#666",
+                tickcolor="#666",
+                showticklabels=True,
+                tickmode="linear",
+                tick0=1,
+                dtick=1,
+            ),
+            yaxis=dict(
+                gridcolor="#444",
+                linecolor="#666",
+                tickcolor="#666",
+                showticklabels=True,
+            ),
+            margin=dict(l=40, r=40, t=60, b=40),
+            autosize=True,
         )
 
         return fig_user

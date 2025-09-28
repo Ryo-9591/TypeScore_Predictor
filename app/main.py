@@ -158,12 +158,12 @@ def create_user_stats_display(
                         dcc.Graph(
                             id="user-performance-chart",
                             figure=fig_user,
-                            style={"height": "200px"},
+                            style={"height": "100%", "width": "100%"},
                         )
                     ],
                     style={
                         "width": "100%",
-                        "marginTop": "10px",
+                        "height": "300px",
                         "overflow": "hidden",
                     },
                 ),
@@ -188,13 +188,13 @@ def create_user_stats_display(
                     dcc.Graph(
                         id="user-performance-chart",
                         figure=fig_user,
-                        style={"height": "250px"},
+                        style={"height": "100%", "width": "100%"},
                     )
                 ],
                 style={
                     "width": "100%",
+                    "height": "300px",
                     "marginTop": "15px",
-                    "maxHeight": "300px",
                     "overflow": "hidden",
                 },
             ),
@@ -293,7 +293,7 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.H3(
-                            "ユーザー選択と最新データ",
+                            "ユーザースコア推移と予測",
                             style={
                                 "color": "#ffffff",
                                 "marginBottom": "15px",
@@ -408,14 +408,15 @@ def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div]:
                 f"エラー: {analysis_data.get('error', '不明なエラー')}",
                 style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
             )
-            return error_div, error_div, error_div, error_div
+            return error_div, error_div, error_div
 
         # ユーザーデータを取得
         user_data = get_user_data()
         users = user_data["users"]
 
-        # ユーザー選択コンポーネントを作成（デフォルト選択なし）
-        user_selector = UserSelector.create(users, None)
+        # ユーザー選択コンポーネントを作成（1番目のユーザーをデフォルト選択）
+        default_user = users[0] if users else None
+        user_selector = UserSelector.create(users, default_user)
 
         # グラフオブジェクトを取得
         scatter_fig = None

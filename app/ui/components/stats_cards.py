@@ -128,6 +128,13 @@ class StatsCard:
                 ]
             )
 
+        # 予想スコアと実測スコアの差を計算
+        predicted_score = user_stats["avg_score"]  # 平均スコアを予想スコアとして使用
+        actual_score = user_stats["latest_score"]
+        score_diff = actual_score - predicted_score
+        diff_sign = "+" if score_diff >= 0 else ""
+        diff_color = "#4CAF50" if score_diff >= 0 else "#FF5722"
+
         return html.Div(
             [
                 html.Div(
@@ -135,7 +142,7 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "総セッション数",
+                                    "セッション数",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
@@ -163,20 +170,33 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "平均スコア",
+                                    "予想スコア",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
                                         "display": "block",
                                     },
                                 ),
-                                html.Span(
-                                    f"{user_stats['avg_score']:.0f}",
-                                    style={
-                                        "color": "#ffffff",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
+                                html.Div(
+                                    [
+                                        html.Span(
+                                            f"{predicted_score:.0f}",
+                                            style={
+                                                "color": "#ffffff",
+                                                "fontSize": "16px",
+                                                "fontWeight": "bold",
+                                            },
+                                        ),
+                                        html.Span(
+                                            f" {diff_sign}{score_diff:.0f}",
+                                            style={
+                                                "color": diff_color,
+                                                "fontSize": "12px",
+                                                "fontWeight": "bold",
+                                            },
+                                        ),
+                                    ],
+                                    style={"display": "flex", "alignItems": "baseline"},
                                 ),
                             ],
                             style={
@@ -191,7 +211,7 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "最高スコア",
+                                    "実測スコア",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
@@ -199,106 +219,9 @@ class StatsCard:
                                     },
                                 ),
                                 html.Span(
-                                    f"{user_stats['max_score']:.0f}",
-                                    style={
-                                        "color": "#4CAF50",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                    ],
-                    style={
-                        "display": "flex",
-                        "flexWrap": "wrap",
-                        "marginBottom": "10px",
-                    },
-                ),
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Span(
-                                    "最低スコア",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['min_score']:.0f}",
-                                    style={
-                                        "color": "#FF9800",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                        html.Div(
-                            [
-                                html.Span(
-                                    "最新スコア",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['latest_score']:.0f}",
+                                    f"{actual_score:.0f}",
                                     style={
                                         "color": "#2196F3",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                        html.Div(
-                            [
-                                html.Span(
-                                    "改善傾向",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['trend']}",
-                                    style={
-                                        "color": "#4CAF50"
-                                        if user_stats["trend"] == "improving"
-                                        else "#FF5722"
-                                        if user_stats["trend"] == "declining"
-                                        else "#FFC107",
                                         "fontSize": "16px",
                                         "fontWeight": "bold",
                                     },
