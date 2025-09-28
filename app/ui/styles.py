@@ -96,6 +96,33 @@ LAYOUT_STYLES = {
         "padding": "15px",
         "flex": "1",
     },
+    # 新しいレイアウト用のスタイル
+    "left_panel": {
+        "backgroundColor": "#2d2d2d",
+        "borderRadius": "8px",
+        "padding": "15px",
+        "flex": "0 0 30%",  # 30%の幅で固定
+        "height": "100%",
+        "minWidth": "300px",  # 最小幅を設定
+        "maxWidth": "30%",  # 最大幅も設定
+        "overflow": "hidden",  # コンテンツがはみ出さないように
+    },
+    "right_panel_container": {
+        "flex": "1",  # 残りの幅を使用
+        "height": "100%",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "15px",
+        "minWidth": "0",  # フレックスアイテムの最小幅を0に設定
+    },
+    "right_panel": {
+        "backgroundColor": "#2d2d2d",
+        "borderRadius": "8px",
+        "padding": "15px",
+        "flex": "1",  # 縦に均等に分割
+        "overflow": "hidden",  # コンテンツがはみ出さないように
+        "boxSizing": "border-box",  # パディングとボーダーを含めたサイズ計算
+    },
 }
 
 # コンポーネントスタイル

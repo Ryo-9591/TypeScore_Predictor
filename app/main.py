@@ -123,7 +123,12 @@ def create_user_stats_display(
                         "padding": "20px",
                     },
                 )
-            ]
+            ],
+            style={
+                "width": "100%",
+                "overflow": "hidden",
+                "boxSizing": "border-box",
+            },
         )
 
     if not user_stats:
@@ -145,6 +150,7 @@ def create_user_stats_display(
                         "flex": "1",
                         "minWidth": "300px",
                         "marginRight": "15px",
+                        "overflow": "hidden",
                     },
                 ),
                 html.Div(
@@ -155,13 +161,19 @@ def create_user_stats_display(
                             style={"height": "200px"},
                         )
                     ],
-                    style={"width": "100%", "marginTop": "10px"},
+                    style={
+                        "width": "100%",
+                        "marginTop": "10px",
+                        "overflow": "hidden",
+                    },
                 ),
             ],
             style={
                 "display": "flex",
                 "flexDirection": "column",
                 "width": "100%",
+                "overflow": "hidden",
+                "boxSizing": "border-box",
             },
         )
 
@@ -183,6 +195,7 @@ def create_user_stats_display(
                     "width": "100%",
                     "marginTop": "15px",
                     "maxHeight": "300px",
+                    "overflow": "hidden",
                 },
             ),
         ],
@@ -191,6 +204,8 @@ def create_user_stats_display(
             "flexDirection": "column",
             "width": "100%",
             "marginBottom": "15px",
+            "overflow": "hidden",  # コンテンツがはみ出さないように
+            "boxSizing": "border-box",  # パディングとボーダーを含めたサイズ計算
         },
     )
 
@@ -271,10 +286,10 @@ app.layout = html.Div(
             id="global-stats-grid",
             style=layout_styles["stats_grid"],
         ),
-        # 下部3パネル
+        # 下部パネル（3:7の比率で配置）
         html.Div(
             [
-                # 左パネル：ユーザー選択と新規データ
+                # 左パネル：ユーザー選択と最新データ（30%）
                 html.Div(
                     [
                         html.H3(
@@ -291,17 +306,23 @@ app.layout = html.Div(
                         # ユーザー選択状態を保持するための隠しコンポーネント
                         dcc.Store(id="selected-user-store", data=None),
                     ],
-                    style=layout_styles["panel"],
+                    style=layout_styles["left_panel"],
                 ),
-                # 中央パネル：特徴量重要度
+                # 右側コンテナ：特徴量重要度と予測精度分析（70%、縦に積む）
                 html.Div(
-                    id="center-panel",
-                    style=layout_styles["panel"],
-                ),
-                # 右パネル：予測精度分析
-                html.Div(
-                    id="right-panel",
-                    style=layout_styles["panel"],
+                    [
+                        # 上部：特徴量重要度分析
+                        html.Div(
+                            id="center-panel",
+                            style=layout_styles["right_panel"],
+                        ),
+                        # 下部：予測値VS実測
+                        html.Div(
+                            id="right-panel",
+                            style=layout_styles["right_panel"],
+                        ),
+                    ],
+                    style=layout_styles["right_panel_container"],
                 ),
             ],
             style=layout_styles["panel_container"],
