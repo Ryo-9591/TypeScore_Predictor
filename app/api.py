@@ -1,31 +1,16 @@
-"""
-TypeScore Predictor - FastAPI REST API
-新しいアーキテクチャに基づくAPIサーバー
-"""
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pathlib import Path
-import logging
 
-# プロジェクトルートをPythonパスに追加
-import sys
-
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-# 新しいアーキテクチャのインポート
+# 共通ユーティリティとアーキテクチャのインポート
+from app.utils.common import get_logger, get_jst_time
 from app.services import PredictionService, UserService, AnalysisService
 from app.config import API_CONFIG, SECURITY_CONFIG
-from app.logging_config import get_logger, setup_logging
+from app.logging_config import setup_logging
 
 # ログ設定の初期化
 setup_logging()
-
-# ロガーの設定
 logger = get_logger(__name__)
 
 # FastAPIアプリの初期化
@@ -258,7 +243,7 @@ async def get_model_metrics():
             mae=metrics["test_mae"],
             sample_count=model_info["sample_count"],
             feature_count=model_info["feature_count"],
-            last_updated=datetime.now().isoformat(),
+            last_updated=get_jst_time().isoformat(),
         )
 
     except Exception as e:
@@ -319,13 +304,13 @@ async def health_check():
         return {
             "status": "healthy" if model_info["is_trained"] else "unhealthy",
             "model_trained": model_info["is_trained"],
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": get_jst_time().isoformat(),
         }
     except Exception as e:
         return {
             "status": "unhealthy",
             "error": str(e),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": get_jst_time().isoformat(),
         }
 
 

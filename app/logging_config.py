@@ -1,8 +1,3 @@
-"""
-ログ設定の初期化モジュール
-アプリケーション全体のログ設定を管理
-"""
-
 import logging
 import logging.handlers
 from pathlib import Path

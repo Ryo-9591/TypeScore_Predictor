@@ -1,39 +1,56 @@
 """
-TypeScore Predictor - メインアプリケーション
+TypeScore Predictor - メインアプリケーション（最適化版）
 新しいアーキテクチャに基づく統合アプリケーション
 """
 
-import sys
-from pathlib import Path
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
-
-# プロジェクトルートをPythonパスに追加
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
+from datetime import datetime
 import dash
 from dash import dcc, html, Input, Output, callback
 import plotly.graph_objs as go
 
-# 新しいアーキテクチャのインポート
-from app.services import PredictionService, UserService, AnalysisService
-from app.ui.components import (
-    StatsCard,
-    StatsGrid,
-    PredictionChart,
-    FeatureImportanceChart,
-    UserPerformanceChart,
-    UserSelector,
-)
-from app.ui.styles import get_layout_styles, get_css_styles
-from app.config import DASHBOARD_CONFIG
-from app.logging_config import get_logger, setup_logging
+# 共通ユーティリティとアーキテクチャのインポート
+try:
+    from app.utils.common import get_logger, get_jst_time, format_datetime
+    from app.services import PredictionService, UserService, AnalysisService
+    from app.ui.components import (
+        StatsCard,
+        StatsGrid,
+        PredictionChart,
+        FeatureImportanceChart,
+        UserPerformanceChart,
+        UserSelector,
+    )
+    from app.ui.styles import get_layout_styles, get_css_styles
+    from app.config import DASHBOARD_CONFIG
+    from app.logging_config import setup_logging
+except ImportError:
+    # Docker環境でのフォールバック
+    import sys
+    from pathlib import Path
+
+    # 複数のパスを追加
+    current_dir = Path(__file__).parent
+    sys.path.insert(0, str(current_dir))
+    sys.path.insert(0, str(current_dir.parent))
+    sys.path.insert(0, str(current_dir.parent.parent))
+
+    from utils.common import get_logger, get_jst_time, format_datetime
+    from services import PredictionService, UserService, AnalysisService
+    from ui.components import (
+        StatsCard,
+        StatsGrid,
+        PredictionChart,
+        FeatureImportanceChart,
+        UserPerformanceChart,
+        UserSelector,
+    )
+    from ui.styles import get_layout_styles, get_css_styles
+    from config import DASHBOARD_CONFIG
+    from logging_config import setup_logging
 
 # ログ設定の初期化
 setup_logging()
-
-# ロガーの設定
 logger = get_logger(__name__)
 
 # Dashアプリの初期化
@@ -353,7 +370,7 @@ def update_global_stats(n: int) -> Tuple[List[html.Div], str]:
         data_info = analysis_data["data_info"]
 
         # 現在時刻を取得
-        current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M (JST)")
+        current_time = format_datetime(get_jst_time(), "%Y年%m月%d日 %H:%M (JST)")
 
         # 統計カードを作成
         stats_cards = StatsGrid.create_global_stats_grid(

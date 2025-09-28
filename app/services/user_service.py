@@ -1,17 +1,12 @@
-"""
-ユーザーサービス
-ユーザー関連のビジネスロジックを提供
-"""
-
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
-import logging
 from datetime import datetime
 
 from app.core import DataProcessor
+from app.utils.common import get_logger, CacheManager, handle_error, get_jst_time
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class UserService:
@@ -20,29 +15,21 @@ class UserService:
     def __init__(self):
         """ユーザーサービスの初期化"""
         self.data_processor = DataProcessor()
-        self._cached_data = None
-        self._cached_users = None  # ユーザーリストのキャッシュ
-        self._user_stats_cache = {}  # ユーザー統計のキャッシュ
+        self.cache_manager = CacheManager()
 
     def get_all_users(self) -> List[str]:
-        """
-        全ユーザーのリストを取得（キャッシュ機能付き）
-
-        Returns:
-            ユーザーIDのリスト
-        """
+        """全ユーザーのリストを取得（キャッシュ機能付き）"""
         try:
             # キャッシュから取得
-            if self._cached_users is not None:
-                return self._cached_users
+            cached_users = self.cache_manager.get("users", max_age_seconds=600)
+            if cached_users is not None:
+                return cached_users
 
             df = self._get_cached_data()
-            users = sorted(
-                [str(user_id) for user_id in df["user_id"].unique().tolist()]
-            )
+            users = sorted([str(user_id) for user_id in df["user_id"].unique()])
 
             # キャッシュに保存
-            self._cached_users = users
+            self.cache_manager.set("users", users)
             logger.info(f"ユーザー一覧取得: {len(users)}人")
             return users
         except Exception as e:
@@ -50,20 +37,13 @@ class UserService:
             return []
 
     def get_user_stats(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        指定されたユーザーの統計データを取得（キャッシュ機能付き）
-
-        Args:
-            user_id: ユーザーID
-
-        Returns:
-            ユーザー統計データの辞書
-        """
+        """指定されたユーザーの統計データを取得（キャッシュ機能付き）"""
         try:
             # キャッシュから取得
-            if user_id in self._user_stats_cache:
-                logger.info(f"ユーザー統計をキャッシュから取得: {user_id}")
-                return self._user_stats_cache[user_id]
+            cache_key = f"user_stats_{user_id}"
+            cached_stats = self.cache_manager.get(cache_key, max_age_seconds=300)
+            if cached_stats is not None:
+                return cached_stats
 
             df = self._get_cached_data()
             user_data = df[df["user_id"].astype(str) == user_id]
@@ -73,43 +53,20 @@ class UserService:
                 return None
 
             # 統計計算
-            total_sessions = len(user_data)
-            avg_score = user_data["score"].mean()
-            max_score = user_data["score"].max()
-            min_score = user_data["score"].min()
-
-            # 最新スコアの取得
-            if "created_at" in user_data.columns:
-                latest_score = user_data.sort_values("created_at")["score"].iloc[-1]
-
-                # 改善傾向の計算
-                recent_scores = user_data.sort_values("created_at")["score"].tail(5)
-                if len(recent_scores) >= 3:
-                    trend = (
-                        "improving"
-                        if recent_scores.iloc[-1] > recent_scores.iloc[0]
-                        else "declining"
-                    )
-                else:
-                    trend = "stable"
-            else:
-                latest_score = user_data["score"].iloc[-1]
-                trend = "stable"
-
             stats = {
                 "user_id": user_id,
-                "total_sessions": total_sessions,
-                "avg_score": float(avg_score),
-                "max_score": float(max_score),
-                "min_score": float(min_score),
-                "latest_score": float(latest_score),
-                "trend": trend,
+                "total_sessions": len(user_data),
+                "avg_score": float(user_data["score"].mean()),
+                "max_score": float(user_data["score"].max()),
+                "min_score": float(user_data["score"].min()),
+                "latest_score": float(self._get_latest_score(user_data)),
+                "trend": self._calculate_trend(user_data),
             }
 
             # キャッシュに保存
-            self._user_stats_cache[user_id] = stats
+            self.cache_manager.set(cache_key, stats)
             logger.info(
-                f"ユーザー統計取得完了: {user_id}, セッション数={total_sessions}"
+                f"ユーザー統計取得完了: {user_id}, セッション数={stats['total_sessions']}"
             )
             return stats
 
@@ -195,7 +152,7 @@ class UserService:
                 "timeseries": timeseries,
                 "performance_level": self._calculate_performance_level(stats),
                 "recommendations": self._generate_recommendations(stats),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }
 
             return summary
@@ -205,14 +162,36 @@ class UserService:
             return {
                 "status": "error",
                 "message": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }
 
     def _get_cached_data(self) -> pd.DataFrame:
         """キャッシュされたデータを取得"""
-        if self._cached_data is None:
-            self._cached_data = self.data_processor.get_processed_data()
-        return self._cached_data
+        cached_data = self.cache_manager.get("processed_data", max_age_seconds=1800)
+        if cached_data is None:
+            cached_data = self.data_processor.get_processed_data()
+            self.cache_manager.set("processed_data", cached_data)
+        return cached_data
+
+    def _get_latest_score(self, user_data: pd.DataFrame) -> float:
+        """最新スコアを取得"""
+        if "created_at" in user_data.columns:
+            return user_data.sort_values("created_at")["score"].iloc[-1]
+        return user_data["score"].iloc[-1]
+
+    def _calculate_trend(self, user_data: pd.DataFrame) -> str:
+        """改善傾向を計算"""
+        if "created_at" not in user_data.columns:
+            return "stable"
+
+        recent_scores = user_data.sort_values("created_at")["score"].tail(5)
+        if len(recent_scores) >= 3:
+            return (
+                "improving"
+                if recent_scores.iloc[-1] > recent_scores.iloc[0]
+                else "declining"
+            )
+        return "stable"
 
     def _calculate_performance_level(self, stats: Dict[str, Any]) -> str:
         """パフォーマンスレベルを計算"""
@@ -255,9 +234,7 @@ class UserService:
 
     def clear_cache(self):
         """キャッシュをクリア"""
-        self._cached_data = None
-        self._cached_users = None
-        self._user_stats_cache = {}
+        self.cache_manager.clear()
         logger.info("ユーザーサービスキャッシュをクリアしました")
 
     def get_users_performance_comparison(self, user_ids: List[str]) -> Dict[str, Any]:
@@ -298,7 +275,7 @@ class UserService:
                     "average_performance": np.mean(avg_scores),
                     "performance_std": np.std(avg_scores),
                 },
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }
 
             logger.info(f"ユーザー比較完了: {len(comparison_data)}人")
@@ -309,5 +286,5 @@ class UserService:
             return {
                 "status": "error",
                 "message": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }

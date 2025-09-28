@@ -1,8 +1,3 @@
-"""
-フォームコンポーネント
-ユーザー入力用のフォームコンポーネントを作成
-"""
-
 from dash import dcc, html
 from typing import List, Optional
 import logging

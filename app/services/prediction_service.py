@@ -1,8 +1,3 @@
-"""
-予測サービス
-スコア予測に関するビジネスロジックを提供
-"""
-
 import numpy as np
 from typing import Dict, Any, Optional
 import logging

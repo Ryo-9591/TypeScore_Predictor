@@ -1,8 +1,3 @@
-"""
-モデル学習モジュール
-XGBoostモデルの学習、評価、予測を行う
-"""
-
 import pandas as pd
 import numpy as np
 import xgboost as xgb

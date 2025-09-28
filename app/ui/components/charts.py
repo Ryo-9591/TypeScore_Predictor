@@ -1,16 +1,12 @@
-"""
-チャートコンポーネント
-各種グラフ・チャートの表示コンポーネントを作成
-"""
-
 from dash import dcc, html
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from typing import Dict, Any, Optional
-import logging
 
-logger = logging.getLogger(__name__)
+from app.utils.common import get_logger
+
+logger = get_logger(__name__)
 
 
 class PredictionChart:
@@ -20,56 +16,41 @@ class PredictionChart:
     def create_panel(
         scatter_fig: go.Figure = None, metrics: Dict[str, Any] = None
     ) -> html.Div:
-        """
-        予測精度分析パネルを作成
-
-        Args:
-            scatter_fig: 散布図のFigureオブジェクト
-            metrics: 評価指標
-
-        Returns:
-            予測精度パネルのDivコンポーネント
-        """
-        if scatter_fig is not None:
-            fig_prediction = scatter_fig
-        else:
-            # データが取得できない場合は空のグラフを作成
-            fig_prediction = go.Figure()
-            fig_prediction.add_annotation(
-                text="データを取得できませんでした",
-                xref="paper",
-                yref="paper",
-                x=0.5,
-                y=0.5,
-                showarrow=False,
-                font=dict(size=16, color="#cccccc"),
-            )
-            fig_prediction.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                autosize=True,
-            )
+        """予測精度分析パネルを作成"""
+        # 図の作成またはフォールバック
+        fig_prediction = scatter_fig or PredictionChart._create_empty_figure(
+            "データを取得できませんでした"
+        )
 
         return html.Div(
             [
-                html.H3(
-                    "予測精度分析",
-                    style={
-                        "color": "#ffffff",
-                        "marginBottom": "10px",
-                        "fontSize": "16px",
-                        "textAlign": "center",
-                    },
-                ),
-                dcc.Graph(
-                    figure=fig_prediction,
-                    style={"height": "calc(100% - 50px)", "width": "100%"},
-                ),
+                html.H3("予測精度分析", className="chart-title"),
+                dcc.Graph(figure=fig_prediction, className="chart-graph"),
             ],
-            style={"height": "100%", "display": "flex", "flexDirection": "column"},
+            className="chart-panel",
         )
+
+    @staticmethod
+    def _create_empty_figure(message: str) -> go.Figure:
+        """空の図を作成"""
+        fig = go.Figure()
+        fig.add_annotation(
+            text=message,
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="#cccccc"),
+        )
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            autosize=True,
+        )
+        return fig
 
 
 class FeatureImportanceChart:
@@ -128,83 +109,59 @@ class FeatureImportanceChart:
     def create_panel(
         feature_importance: Dict[str, Any], importance_fig: go.Figure = None
     ) -> html.Div:
-        """
-        特徴量重要度パネルを作成
-
-        Args:
-            feature_importance: 特徴量重要度の辞書
-            importance_fig: 重要度グラフのFigureオブジェクト
-
-        Returns:
-            特徴量重要度パネルのDivコンポーネント
-        """
+        """特徴量重要度パネルを作成"""
+        # 図の作成またはフォールバック
         if importance_fig is not None:
             fig_feature = importance_fig
         elif feature_importance:
-            # フォールバック: 辞書データからグラフを作成
-            importance_df = pd.DataFrame(
-                {
-                    "feature": list(feature_importance.keys()),
-                    "importance": list(feature_importance.values()),
-                }
-            ).sort_values("importance", ascending=True)
-
-            fig_feature = px.bar(
-                importance_df,
-                x="importance",
-                y="feature",
-                orientation="h",
-                title="特徴量重要度",
-                color="importance",
-                color_continuous_scale="viridis",
-            )
-            fig_feature.update_layout(
-                yaxis={"categoryorder": "total ascending"},
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#ffffff", size=10),
-                title_font=dict(color="#ffffff", size=14),
-                margin=dict(l=80, r=40, t=60, b=40),
-                autosize=True,
-            )
+            fig_feature = FeatureImportanceChart._create_from_dict(feature_importance)
         else:
-            # データが取得できない場合は空のグラフを作成
-            fig_feature = go.Figure()
-            fig_feature.add_annotation(
-                text="データを取得できませんでした",
-                xref="paper",
-                yref="paper",
-                x=0.5,
-                y=0.5,
-                showarrow=False,
-                font=dict(size=16, color="#cccccc"),
-            )
-            fig_feature.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                autosize=True,
+            fig_feature = FeatureImportanceChart._create_empty_figure(
+                "データを取得できませんでした"
             )
 
         return html.Div(
             [
-                html.H3(
-                    "特徴量重要度分析",
-                    style={
-                        "color": "#ffffff",
-                        "marginBottom": "10px",
-                        "fontSize": "16px",
-                        "textAlign": "center",
-                    },
-                ),
-                dcc.Graph(
-                    figure=fig_feature,
-                    style={"height": "calc(100% - 50px)", "width": "100%"},
-                ),
+                html.H3("特徴量重要度分析", className="chart-title"),
+                dcc.Graph(figure=fig_feature, className="chart-graph"),
             ],
-            style={"height": "100%", "display": "flex", "flexDirection": "column"},
+            className="chart-panel",
         )
+
+    @staticmethod
+    def _create_from_dict(feature_importance: Dict[str, Any]) -> go.Figure:
+        """辞書データからグラフを作成"""
+        importance_df = pd.DataFrame(
+            {
+                "feature": list(feature_importance.keys()),
+                "importance": list(feature_importance.values()),
+            }
+        ).sort_values("importance", ascending=True)
+
+        fig = px.bar(
+            importance_df,
+            x="importance",
+            y="feature",
+            orientation="h",
+            title="特徴量重要度",
+            color="importance",
+            color_continuous_scale="viridis",
+        )
+        fig.update_layout(
+            yaxis={"categoryorder": "total ascending"},
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff", size=10),
+            title_font=dict(color="#ffffff", size=14),
+            margin=dict(l=80, r=40, t=60, b=40),
+            autosize=True,
+        )
+        return fig
+
+    @staticmethod
+    def _create_empty_figure(message: str) -> go.Figure:
+        """空の図を作成"""
+        return PredictionChart._create_empty_figure(message)
 
 
 class UserPerformanceChart:

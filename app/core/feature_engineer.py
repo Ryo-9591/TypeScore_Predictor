@@ -1,13 +1,10 @@
-"""
-特徴量エンジニアリングモジュール
-機械学習用の特徴量を作成・変換する
-"""
-
 import pandas as pd
+import numpy as np
 from typing import Tuple, List, Dict
-import logging
 
-logger = logging.getLogger(__name__)
+from app.utils.common import get_logger, log_execution_time
+
+logger = get_logger(__name__)
 
 
 class FeatureEngineer:
@@ -18,35 +15,28 @@ class FeatureEngineer:
         self.feature_names = []
         self.feature_stats = {}
 
+    @log_execution_time
     def create_features(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
-        """
-        特徴量を作成して機械学習用のデータセットを生成
-
-        Args:
-            df: 処理済みデータフレーム
-
-        Returns:
-            特徴量データフレームとターゲット変数
-        """
-        logger.info("特徴量エンジニアリング開始...")
+        """特徴量を作成して機械学習用のデータセットを生成"""
+        logger.info(f"特徴量エンジニアリング開始: {df.shape}")
 
         try:
-            logger.info(f"入力データ形状: {df.shape}")
-            logger.info(f"入力データカラム: {list(df.columns)}")
+            # 特徴量作成のパイプライン
+            df_features = df.copy()
 
-            # 基本特徴量の作成
-            df_features = self._create_basic_features(df)
+            # 特徴量作成ステップ
+            feature_steps = [
+                ("基本特徴量", self._create_basic_features),
+                ("時系列特徴量", self._create_temporal_features),
+                ("統計特徴量", self._create_statistical_features),
+            ]
 
-            # 時系列特徴量の作成
-            df_features = self._create_temporal_features(df_features)
-
-            # 統計特徴量の作成
-            df_features = self._create_statistical_features(df_features)
+            for step_name, step_func in feature_steps:
+                logger.info(f"{step_name}作成中...")
+                df_features = step_func(df_features)
 
             # ターゲット変数の分離
             X, y = self._separate_target(df_features)
-
-            # 特徴量名を保存
             self.feature_names = list(X.columns)
 
             logger.info(
@@ -56,9 +46,6 @@ class FeatureEngineer:
 
         except Exception as e:
             logger.error(f"特徴量エンジニアリングエラー: {e}")
-            import traceback
-
-            logger.error(f"詳細エラー: {traceback.format_exc()}")
             raise
 
     def _create_basic_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -70,17 +57,18 @@ class FeatureEngineer:
             df_features["user_id"].astype(str).apply(lambda x: hash(x) % 10000)
         )
 
-        # ミス率の計算
-        df_features["miss_rate"] = (
-            df_features["total_miss"] / df_features["typing_count"]
+        # 比率特徴量の計算（ゼロ除算を避ける）
+        df_features["miss_rate"] = np.where(
+            df_features["typing_count"] > 0,
+            df_features["total_miss"] / df_features["typing_count"],
+            0,
         )
-        df_features["miss_rate"] = df_features["miss_rate"].fillna(0)
 
-        # スコア効率の計算
-        df_features["score_efficiency"] = (
-            df_features["score"] / df_features["typing_count"]
+        df_features["score_efficiency"] = np.where(
+            df_features["typing_count"] > 0,
+            df_features["score"] / df_features["typing_count"],
+            0,
         )
-        df_features["score_efficiency"] = df_features["score_efficiency"].fillna(0)
 
         return df_features
 
@@ -105,61 +93,41 @@ class FeatureEngineer:
         """ユーザー別の履歴特徴量を作成"""
         df_features = df.copy()
 
-        # ユーザー別にソート（created_atが存在する場合のみ）
-        if "created_at" in df_features.columns:
-            df_features = df_features.sort_values(["user_id", "created_at"])
-        else:
-            # created_atが存在しない場合は、user_idのみでソート
-            df_features = df_features.sort_values(["user_id"])
-            logger.warning(
-                "created_atカラムが存在しません。時系列特徴量をスキップします。"
-            )
-
-        # 過去のスコア特徴量
-        df_features["prev_score"] = df_features.groupby("user_id")["score"].shift(1)
-        df_features["prev_score"] = df_features["prev_score"].fillna(
-            df_features["score"].mean()
+        # ソート処理
+        sort_columns = ["user_id"] + (
+            ["created_at"] if "created_at" in df_features.columns else []
         )
+        df_features = df_features.sort_values(sort_columns)
 
-        # 過去3回の平均スコア
-        df_features["avg_score_3"] = (
-            df_features.groupby("user_id")["score"]
-            .rolling(window=3, min_periods=1)
+        # グループ化オブジェクトを事前計算
+        user_groups = df_features.groupby("user_id")
+        score_groups = user_groups["score"]
+        miss_groups = user_groups["total_miss"]
+
+        # 履歴特徴量の一括計算
+        history_features = {
+            "prev_score": score_groups.shift(1).fillna(df_features["score"].mean()),
+            "avg_score_3": score_groups.rolling(3, min_periods=1)
             .mean()
-            .reset_index(0, drop=True)
-        )
-
-        # 過去3回の最大・最小スコア
-        df_features["max_score_3"] = (
-            df_features.groupby("user_id")["score"]
-            .rolling(window=3, min_periods=1)
+            .reset_index(0, drop=True),
+            "max_score_3": score_groups.rolling(3, min_periods=1)
             .max()
-            .reset_index(0, drop=True)
-        )
-
-        df_features["min_score_3"] = (
-            df_features.groupby("user_id")["score"]
-            .rolling(window=3, min_periods=1)
+            .reset_index(0, drop=True),
+            "min_score_3": score_groups.rolling(3, min_periods=1)
             .min()
-            .reset_index(0, drop=True)
-        )
-
-        # 過去3回のミス平均
-        df_features["avg_miss_3"] = (
-            df_features.groupby("user_id")["total_miss"]
-            .rolling(window=3, min_periods=1)
+            .reset_index(0, drop=True),
+            "avg_miss_3": miss_groups.rolling(3, min_periods=1)
             .mean()
-            .reset_index(0, drop=True)
-        )
-
-        # 過去3回のスコア標準偏差
-        df_features["score_std_3"] = (
-            df_features.groupby("user_id")["score"]
-            .rolling(window=3, min_periods=1)
+            .reset_index(0, drop=True),
+            "score_std_3": score_groups.rolling(3, min_periods=1)
             .std()
             .reset_index(0, drop=True)
-        )
-        df_features["score_std_3"] = df_features["score_std_3"].fillna(0)
+            .fillna(0),
+        }
+
+        # 特徴量を一括追加
+        for feature_name, feature_values in history_features.items():
+            df_features[feature_name] = feature_values
 
         return df_features
 
@@ -167,23 +135,27 @@ class FeatureEngineer:
         """統計特徴量の作成"""
         df_features = df.copy()
 
-        # スコアの正規化（ユーザー別）
-        df_features["score_normalized"] = df_features.groupby("user_id")[
-            "score"
-        ].transform(lambda x: (x - x.mean()) / x.std())
-        df_features["score_normalized"] = df_features["score_normalized"].fillna(0)
+        # 正規化処理の関数
+        def safe_normalize(group):
+            """安全な正規化（標準偏差が0の場合は0を返す）"""
+            mean_val = group.mean()
+            std_val = group.std()
+            return (group - mean_val) / std_val if std_val > 0 else group - mean_val
 
-        # ミス数の正規化
-        df_features["miss_normalized"] = df_features.groupby("user_id")[
-            "total_miss"
-        ].transform(lambda x: (x - x.mean()) / x.std())
-        df_features["miss_normalized"] = df_features["miss_normalized"].fillna(0)
+        # ユーザー別正規化の一括処理
+        user_groups = df_features.groupby("user_id")
+        df_features["score_normalized"] = (
+            user_groups["score"].transform(safe_normalize).fillna(0)
+        )
+        df_features["miss_normalized"] = (
+            user_groups["total_miss"].transform(safe_normalize).fillna(0)
+        )
 
         return df_features
 
     def _separate_target(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """ターゲット変数の分離"""
-        # 特徴量として使用する列を選択
+        # 特徴量として使用する列を定義
         feature_columns = [
             "user_id_numeric",
             "prev_score",
@@ -204,12 +176,12 @@ class FeatureEngineer:
 
         # 存在する列のみを選択
         available_columns = [col for col in feature_columns if col in df.columns]
-
         X = df[available_columns].copy()
         y = df["score"].copy()
 
-        # 欠損値の最終処理
-        X = X.fillna(X.mean())
+        # 欠損値の最終処理（数値型のみ）
+        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        X[numeric_cols] = X[numeric_cols].fillna(X[numeric_cols].mean())
 
         return X, y
 

@@ -1,8 +1,3 @@
-"""
-統計カードコンポーネント
-ダッシュボード用の統計表示カードを作成
-"""
-
 from dash import html
 from typing import Dict, Any, List
 import logging

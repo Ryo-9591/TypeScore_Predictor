@@ -156,7 +156,7 @@ COMPONENT_STYLES = {
     },
 }
 
-# CSSスタイル文字列
+# CSSスタイル文字列（最適化版）
 CSS_STYLES = """
 body {
     background-color: #0f1419;
@@ -167,16 +167,46 @@ body {
     overflow-x: hidden;
 }
 
-/* グローバル統計カードのスタイル */
-.stats-card {
+/* 共通コンポーネントスタイル */
+.stats-card, .panel {
     background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
     border: 1px solid #444;
     border-radius: 12px;
-    padding: 15px;
-    text-align: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
+.stats-card {
+    padding: 15px;
+    text-align: center;
+}
+
+.panel {
+    padding: 12px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* チャート関連スタイル */
+.chart-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-title {
+    color: #ffffff;
+    margin-bottom: 10px;
+    font-size: 16px;
+    text-align: center;
+}
+
+.chart-graph {
+    height: calc(100% - 50px);
+    width: 100%;
+}
+
+/* テキストスタイル */
 .stats-card h3 {
     margin: 0 0 8px 0;
     font-size: 14px;
@@ -199,19 +229,7 @@ body {
     opacity: 0.8;
 }
 
-/* パネルのスタイル */
-.panel {
-    background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
-    border: 1px solid #444;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-/* ヘッダーのスタイル */
+/* ダッシュボードヘッダー */
 .dashboard-header {
     background: linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%);
     padding: 15px;
@@ -276,7 +294,7 @@ body {
     animation: fadeIn 0.5s ease-out;
 }
 
-/* スクロールバーのスタイル */
+/* スクロールバー */
 ::-webkit-scrollbar {
     width: 8px;
 }

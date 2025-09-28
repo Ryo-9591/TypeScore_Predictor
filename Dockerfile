@@ -25,5 +25,8 @@ RUN mkdir -p /app/logs
 RUN chmod -R 755 /app/data
 RUN chmod -R 755 /app/logs
 
+# Pythonパスを設定
+ENV PYTHONPATH=/app:/app/app
+
 # デフォルトコマンド
 CMD ["python", "app/main.py"]
