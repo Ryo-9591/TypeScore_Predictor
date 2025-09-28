@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
 from app.utils.common import get_logger
+from app.ui.components.charts import PredictionChart, FeatureImportanceChart
 
 logger = get_logger(__name__)
 
@@ -43,10 +44,10 @@ class AnalysisService:
             # 予測結果の可視化
             y_pred = model.predict(X.iloc[-int(len(X) * 0.2) :])  # テストデータの予測
             y_test = y.iloc[-int(len(y) * 0.2) :]
-            scatter_fig = self.create_prediction_plot(y_test, y_pred)
+            scatter_fig = PredictionChart.create_scatter_plot(y_test, y_pred, metrics)
 
             # 特徴量重要度分析
-            importance_fig = self.create_feature_importance_chart(model, X.columns)
+            importance_fig = FeatureImportanceChart.create_from_model(model, X.columns)
 
             # データ情報
             data_info = self.data_processor.get_data_info()
@@ -103,155 +104,6 @@ class AnalysisService:
             分析結果の辞書
         """
         return self._cached_analysis
-
-    def create_feature_importance_chart(self, model, feature_names) -> go.Figure:
-        """
-        特徴量重要度チャートを作成
-
-        Args:
-            model: 学習済みモデル
-            feature_names: 特徴量名のリスト
-
-        Returns:
-            特徴量重要度チャートのFigureオブジェクト
-        """
-        logger.info("特徴量重要度チャートを作成中...")
-
-        # 特徴量重要度の取得
-        importance_df = pd.DataFrame(
-            {"feature": feature_names, "importance": model.feature_importances_}
-        ).sort_values("importance", ascending=True)
-
-        # 上位10個の特徴量を選択
-        top_features = importance_df.tail(10)
-
-        # ダークテーマに適したカラーパレット
-        dark_colors = [
-            "#007bff",
-            "#28a745",
-            "#ffc107",
-            "#dc3545",
-            "#17a2b8",
-            "#6f42c1",
-            "#e83e8c",
-            "#17a2b8",
-            "#6c757d",
-            "#20c997",
-        ]
-
-        fig = go.Figure(
-            data=[
-                go.Bar(
-                    x=top_features["importance"],
-                    y=top_features["feature"],
-                    orientation="h",
-                    marker=dict(
-                        color=dark_colors[: len(top_features)],
-                        line=dict(color="#ffffff", width=1),
-                    ),
-                    text=[f"{imp:.3f}" for imp in top_features["importance"]],
-                    textposition="auto",
-                    textfont=dict(color="#ffffff", size=10),
-                )
-            ]
-        )
-
-        # ダークテーマを適用
-        fig.update_layout(
-            title="特徴量重要度（上位10個）",
-            height=max(300, len(top_features) * 30),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=10),
-            title_font=dict(color="#ffffff", size=14),
-            margin=dict(l=60, r=20, t=50, b=30),
-            autosize=True,
-            xaxis=dict(
-                title_text="重要度",
-                gridcolor="#444",
-                linecolor="#666",
-                tickcolor="#666",
-                title_font=dict(color="#ffffff", size=12),
-            ),
-            yaxis=dict(
-                title_text="特徴量",
-                gridcolor="#444",
-                linecolor="#666",
-                tickcolor="#666",
-                title_font=dict(color="#ffffff", size=12),
-            ),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
-        logger.info("特徴量重要度チャートを作成しました")
-        return fig
-
-    def create_prediction_plot(
-        self, y_test: pd.Series, y_pred: np.ndarray
-    ) -> go.Figure:
-        """
-        予測結果の散布図を作成
-
-        Args:
-            y_test: 実測値
-            y_pred: 予測値
-
-        Returns:
-            PlotlyのFigureオブジェクト
-        """
-        logger.info("予測結果の散布図を作成中...")
-
-        fig = go.Figure()
-
-        # 散布図の追加
-        fig.add_trace(
-            go.Scatter(
-                x=y_test,
-                y=y_pred,
-                mode="markers",
-                marker=dict(
-                    size=8,
-                    opacity=0.6,
-                    color="#007bff",
-                    line=dict(color="#ffffff", width=1),
-                ),
-                name="予測値 vs 実測値",
-            )
-        )
-
-        # 理想的な予測線（y=x）を追加
-        min_val = min(y_test.min(), y_pred.min())
-        max_val = max(y_test.max(), y_pred.max())
-        fig.add_trace(
-            go.Scatter(
-                x=[min_val, max_val],
-                y=[min_val, max_val],
-                mode="lines",
-                line=dict(color="#dc3545", width=3, dash="dash"),
-                name="理想的な予測線",
-            )
-        )
-
-        # ダークテーマを適用
-        metrics = self.model_trainer.metrics
-        title_text = f"予測スコア vs 実測スコア<br>RMSE: {metrics['test_rmse']:.2f}, MAE: {metrics['test_mae']:.2f}"
-        fig.update_layout(
-            title=title_text,
-            xaxis_title="実測スコア",
-            yaxis_title="予測スコア",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=10),
-            title_font=dict(color="#ffffff", size=14),
-            margin=dict(l=60, r=20, t=60, b=40),
-            autosize=True,
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
-        logger.info("予測散布図を作成しました")
-        return fig
 
     def analyze_data_quality(self) -> Dict[str, Any]:
         """
