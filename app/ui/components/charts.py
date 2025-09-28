@@ -200,10 +200,16 @@ class UserPerformanceChart:
         fig_user = go.Figure()
 
         if timeseries_data:
+            # 時間データの型を確認して適切に処理
+            timestamps = timeseries_data["timestamps"]
+            scores = timeseries_data["scores"]
+
+            logger.info(f"グラフ作成: {len(timestamps)}個のデータポイント")
+
             fig_user.add_trace(
                 go.Scatter(
-                    x=timeseries_data["timestamps"],
-                    y=timeseries_data["scores"],
+                    x=timestamps,
+                    y=scores,
                     mode="lines+markers",
                     name=f"ユーザー {selected_user}",
                     line=dict(color="#007bff", width=3),
@@ -213,8 +219,6 @@ class UserPerformanceChart:
 
         # ダークテーマを適用
         fig_user.update_layout(
-            xaxis_title="",
-            yaxis_title="",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#ffffff", size=10),
@@ -224,9 +228,14 @@ class UserPerformanceChart:
                 linecolor="#666",
                 tickcolor="#666",
                 showticklabels=True,
-                tickmode="linear",
-                tick0=1,
-                dtick=1,
+                tickangle=45,
+                tickformat="%m/%d %H:%M",
+                type="date",
+                tickmode="array",
+                tickvals=timestamps if timestamps else [],
+                ticktext=[ts.strftime("%m/%d %H:%M") for ts in timestamps]
+                if timestamps
+                else [],
             ),
             yaxis=dict(
                 gridcolor="#444",
@@ -234,7 +243,7 @@ class UserPerformanceChart:
                 tickcolor="#666",
                 showticklabels=True,
             ),
-            margin=dict(l=40, r=40, t=60, b=40),
+            margin=dict(l=40, r=40, t=60, b=80),
             autosize=True,
         )
 

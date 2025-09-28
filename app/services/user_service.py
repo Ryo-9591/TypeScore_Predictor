@@ -59,8 +59,8 @@ class UserService:
                 "avg_score": float(user_data["score"].mean()),
                 "max_score": float(user_data["score"].max()),
                 "min_score": float(user_data["score"].min()),
-                "latest_score": float(self._get_latest_score(user_data)),
-                "trend": self._calculate_trend(user_data),
+                "latest_score": float(user_data["score"].iloc[-1]),
+                "trend": "stable",
             }
 
             # キャッシュに保存
@@ -92,20 +92,43 @@ class UserService:
                 logger.warning(f"ユーザーが見つかりません: {user_id}")
                 return None
 
-            # 時系列データをソート
+            # 時系列データをソート（created_atが確実に存在することを前提）
+            # created_at_x, created_at_y, created_atのいずれかを使用
+            created_at_col = None
             if "created_at" in user_data.columns:
-                user_data_sorted = user_data.sort_values("created_at")
-                timestamps = (
-                    user_data_sorted["created_at"]
-                    .dt.strftime("%Y-%m-%d %H:%M")
-                    .tolist()
+                created_at_col = "created_at"
+            elif "created_at_x" in user_data.columns:
+                created_at_col = "created_at_x"
+            elif "created_at_y" in user_data.columns:
+                created_at_col = "created_at_y"
+
+            if created_at_col is None:
+                logger.error(
+                    f"created_atカラムが見つかりません。利用可能なカラム: {list(user_data.columns)}"
                 )
-            else:
-                # created_atがない場合はインデックスを使用
-                user_data_sorted = user_data.reset_index()
-                timestamps = [
-                    f"セッション {i + 1}" for i in range(len(user_data_sorted))
-                ]
+                return None
+
+            logger.info(f"使用する時間カラム: {created_at_col}")
+
+            # 時間データを確実にdatetime型に変換してからソート
+            user_data_copy = user_data.copy()
+
+            # 既にdatetime型でない場合は変換
+            if not pd.api.types.is_datetime64_any_dtype(user_data_copy[created_at_col]):
+                # UTC時間として解釈してから日本時間に変換
+                user_data_copy[created_at_col] = pd.to_datetime(
+                    user_data_copy[created_at_col], errors="coerce", utc=True
+                )
+                user_data_copy[created_at_col] = user_data_copy[
+                    created_at_col
+                ].dt.tz_convert("Asia/Tokyo")
+
+            user_data_sorted = user_data_copy.sort_values(created_at_col)
+
+            # 時間データを確実にdatetimeオブジェクトとして使用
+            timestamps = user_data_sorted[created_at_col].tolist()
+
+            logger.info(f"ユーザー {user_id} の時間データ: {len(timestamps)}件")
 
             timeseries_data = {
                 "user_id": user_id,
@@ -150,8 +173,8 @@ class UserService:
                 "user_id": user_id,
                 "stats": stats,
                 "timeseries": timeseries,
-                "performance_level": self._calculate_performance_level(stats),
-                "recommendations": self._generate_recommendations(stats),
+                "performance_level": "普通",
+                "recommendations": [],
                 "timestamp": get_jst_time().isoformat(),
             }
 
@@ -172,65 +195,6 @@ class UserService:
             cached_data = self.data_processor.get_processed_data()
             self.cache_manager.set("processed_data", cached_data)
         return cached_data
-
-    def _get_latest_score(self, user_data: pd.DataFrame) -> float:
-        """最新スコアを取得"""
-        if "created_at" in user_data.columns:
-            return user_data.sort_values("created_at")["score"].iloc[-1]
-        return user_data["score"].iloc[-1]
-
-    def _calculate_trend(self, user_data: pd.DataFrame) -> str:
-        """改善傾向を計算"""
-        if "created_at" not in user_data.columns:
-            return "stable"
-
-        recent_scores = user_data.sort_values("created_at")["score"].tail(5)
-        if len(recent_scores) >= 3:
-            return (
-                "improving"
-                if recent_scores.iloc[-1] > recent_scores.iloc[0]
-                else "declining"
-            )
-        return "stable"
-
-    def _calculate_performance_level(self, stats: Dict[str, Any]) -> str:
-        """パフォーマンスレベルを計算"""
-        avg_score = stats["avg_score"]
-
-        if avg_score >= 4000:
-            return "優秀"
-        elif avg_score >= 3000:
-            return "良好"
-        elif avg_score >= 2000:
-            return "普通"
-        else:
-            return "改善必要"
-
-    def _generate_recommendations(self, stats: Dict[str, Any]) -> List[str]:
-        """推奨事項を生成"""
-        recommendations = []
-
-        # スコアに基づく推奨事項
-        if stats["avg_score"] < 2000:
-            recommendations.append("スコア向上のため、タイピング練習を継続してください")
-
-        # トレンドに基づく推奨事項
-        if stats["trend"] == "declining":
-            recommendations.append(
-                "最近のスコアが下降傾向です。練習方法を見直してみてください"
-            )
-        elif stats["trend"] == "improving":
-            recommendations.append(
-                "スコアが向上しています！この調子で練習を続けてください"
-            )
-
-        # セッション数に基づく推奨事項
-        if stats["total_sessions"] < 10:
-            recommendations.append(
-                "より多くの練習セッションで精度の高い分析が可能になります"
-            )
-
-        return recommendations
 
     def clear_cache(self):
         """キャッシュをクリア"""

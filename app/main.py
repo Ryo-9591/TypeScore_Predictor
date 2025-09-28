@@ -173,7 +173,7 @@ def create_user_stats_display(
                     [user_chart],
                     style={
                         "width": "100%",
-                        "height": "300px",
+                        "height": "450px",
                         "overflow": "hidden",
                     },
                 ),
@@ -197,7 +197,7 @@ def create_user_stats_display(
                 [user_chart],
                 style={
                     "width": "100%",
-                    "height": "300px",
+                    "height": "450px",
                     "marginTop": "15px",
                     "overflow": "hidden",
                 },

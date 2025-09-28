@@ -89,14 +89,30 @@ class DataProcessor:
             miss_totals.rename(columns={"miss_count": "total_miss"}, inplace=True)
             logger.info(f"miss_totals形状: {miss_totals.shape}")
 
-            # スコアデータとミス合計データを統合（created_atの重複を避けるため、必要なカラムのみ選択）
+            # スコアデータとミス合計データを統合
             df_merged = score_df.merge(miss_totals, on="user_id", how="left")
 
             # デバッグ: マージ後のカラムを確認
             logger.info(f"マージ後のカラム: {list(df_merged.columns)}")
 
-            # ユーザー情報を統合
-            df_final = df_merged.merge(users_df, on="user_id", how="left")
+            # ユーザー情報を統合（created_atの重複を避けるため、suffixesを使用）
+            df_final = df_merged.merge(
+                users_df, on="user_id", how="left", suffixes=("", "_user")
+            )
+
+            # created_at_xとcreated_at_yが存在する場合は、created_at_xを優先してcreated_atに統一
+            if (
+                "created_at_x" in df_final.columns
+                and "created_at_y" in df_final.columns
+            ):
+                df_final["created_at"] = df_final["created_at_x"]
+                df_final = df_final.drop(columns=["created_at_x", "created_at_y"])
+            elif "created_at_x" in df_final.columns:
+                df_final["created_at"] = df_final["created_at_x"]
+                df_final = df_final.drop(columns=["created_at_x"])
+            elif "created_at_y" in df_final.columns:
+                df_final["created_at"] = df_final["created_at_y"]
+                df_final = df_final.drop(columns=["created_at_y"])
 
             # デバッグ: 最終的なカラムを確認
             logger.info(f"最終的なカラム: {list(df_final.columns)}")
@@ -150,7 +166,11 @@ class DataProcessor:
 
         for col in datetime_columns:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
+                # UTC時間を日本時間に変換してからdatetime型に変換
+                df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+
+                # UTCから日本時間（JST）に変換
+                df[col] = df[col].dt.tz_convert("Asia/Tokyo")
 
         return df
 

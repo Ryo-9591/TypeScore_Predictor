@@ -111,7 +111,7 @@ LAYOUT_STYLES = {
         "backgroundColor": "#2d2d2d",
         "borderRadius": "8px",
         "padding": "12px",
-        "flex": "1",
+        "flex": "2",
         "overflow": "hidden",
         "boxSizing": "border-box",
     },
