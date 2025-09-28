@@ -1,8 +1,3 @@
-"""
-設定管理モジュール
-アプリケーション全体の設定を一元管理
-"""
-
 from pathlib import Path
 import os
 

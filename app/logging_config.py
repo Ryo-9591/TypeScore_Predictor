@@ -71,7 +71,4 @@ if __name__ == "__main__":
 
     # テストログ出力
     logger = get_logger(__name__)
-    report_logger = get_report_logger()
-
     logger.info("アプリケーションログのテスト")
-    report_logger.info("予測精度レポートログのテスト")

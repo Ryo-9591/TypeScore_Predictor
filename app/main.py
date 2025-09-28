@@ -1,8 +1,3 @@
-"""
-TypeScore Predictor - メインアプリケーション（最適化版）
-新しいアーキテクチャに基づく統合アプリケーション
-"""
-
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 import dash
