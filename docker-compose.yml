@@ -6,6 +6,7 @@ services:
       - "8050:8050"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
     command: python app/main.py

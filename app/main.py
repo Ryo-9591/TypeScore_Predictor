@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
+import logging
 
 # プロジェクトルートをPythonパスに追加
 project_root = Path(__file__).parent.parent
@@ -28,6 +29,13 @@ from app.ui.components import (
 )
 from app.ui.styles import get_layout_styles, get_css_styles
 from app.config import DASHBOARD_CONFIG
+from app.logging_config import get_logger, setup_logging
+
+# ログ設定の初期化
+setup_logging()
+
+# ロガーの設定
+logger = get_logger(__name__)
 
 # Dashアプリの初期化
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -47,7 +55,7 @@ def load_data_and_model():
     global cached_analysis_data
 
     if cached_analysis_data is None:
-        print("データとモデルの読み込み中...")
+        logger.info("データとモデルの読み込み中...")
         start_time = datetime.now()
 
         # 分析サービスを使用してデータとモデルを読み込み
@@ -56,7 +64,7 @@ def load_data_and_model():
         end_time = datetime.now()
         execution_time = (end_time - start_time).total_seconds()
 
-        print(f"データとモデルの読み込み完了 - 実行時間: {execution_time:.2f}秒")
+        logger.info(f"データとモデルの読み込み完了 - 実行時間: {execution_time:.2f}秒")
 
     return cached_analysis_data
 

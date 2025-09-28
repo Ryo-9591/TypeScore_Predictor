@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 # プロジェクトルートの設定
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -51,6 +51,21 @@ LOG_CONFIG = {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "file": PROJECT_ROOT / "logs" / "app.log",
+    "rotation": "daily",  # 日次ローテーション
+    "retention": 30,  # 30日間保持
+}
+
+# 予測精度レポート用ログ設定
+PREDICTION_REPORT_CONFIG = {
+    "enabled": True,
+    "file": PROJECT_ROOT / "logs" / "prediction_report.log",
+    "format": "%(asctime)s - %(levelname)s - %(message)s",
+    "level": "INFO",
+    "rotation": "daily",  # 日次ローテーション
+    "retention": 30,  # 30日間保持
+    "include_metrics": True,  # メトリクス情報を含める
+    "include_feature_importance": True,  # 特徴量重要度を含める
+    "include_prediction_details": True,  # 予測詳細を含める
 }
 
 # ダッシュボード設定
@@ -110,6 +125,7 @@ ALL_CONFIG = {
     "cv": CV_CONFIG,
     "target_accuracy": TARGET_ACCURACY,
     "log": LOG_CONFIG,
+    "prediction_report": PREDICTION_REPORT_CONFIG,
     "dashboard": DASHBOARD_CONFIG,
     "api": API_CONFIG,
     "database": DATABASE_CONFIG,

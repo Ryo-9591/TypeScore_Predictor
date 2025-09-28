@@ -18,8 +18,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY data/ ./data/
 
-# データディレクトリの権限設定
+# ログディレクトリの作成
+RUN mkdir -p /app/logs
+
+# データディレクトリとログディレクトリの権限設定
 RUN chmod -R 755 /app/data
+RUN chmod -R 755 /app/logs
 
 # デフォルトコマンド
 CMD ["python", "app/main.py"]

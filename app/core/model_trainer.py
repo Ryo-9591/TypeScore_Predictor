@@ -12,8 +12,16 @@ from sklearn.preprocessing import LabelEncoder
 from typing import Tuple, Dict, Any
 import logging
 import plotly.graph_objects as go
+import json
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
+from app.utils import safe_text_log
+from app.logging_config import get_logger, get_report_logger
+
+logger = get_logger(__name__)
+
+# 予測精度レポート用の専用ロガー
+report_logger = get_report_logger()
 
 
 class ModelTrainer:
@@ -64,7 +72,7 @@ class ModelTrainer:
         try:
             # 学習サンプル数を保存
             self.training_samples = len(X)
-            print(f"DEBUG: training_samples = {self.training_samples}")
+            logger.debug(f"学習サンプル数: {self.training_samples}")
 
             # 特徴量名を保存
             self.feature_names = list(X.columns)
@@ -88,10 +96,15 @@ class ModelTrainer:
             self.metrics = metrics
 
             logger.info(f"モデル学習完了 - テストMAE: {metrics['test_mae']:.2f}")
+
+            # 精度分析レポートの出力
+            self._log_accuracy_analysis(X_train, y_train, X_test, y_test, metrics)
+
             return model, metrics
 
         except Exception as e:
             logger.error(f"モデル学習エラー: {e}")
+            self._log_training_error(str(e))
             raise
 
     def _encode_categorical_features(
@@ -249,6 +262,129 @@ class ModelTrainer:
             raise ValueError("モデルが学習されていません")
 
         return dict(zip(self.feature_names, self.model.feature_importances_))
+
+    def _log_accuracy_analysis(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_test: pd.DataFrame,
+        y_test: pd.Series,
+        metrics: Dict[str, float],
+    ):
+        """精度分析レポートをログに出力"""
+        try:
+            # 基本統計情報
+            train_stats = {
+                "mean": float(y_train.mean()),
+                "std": float(y_train.std()),
+                "min": float(y_train.min()),
+                "max": float(y_train.max()),
+                "median": float(y_train.median()),
+            }
+
+            test_stats = {
+                "mean": float(y_test.mean()),
+                "std": float(y_test.std()),
+                "min": float(y_test.min()),
+                "max": float(y_test.max()),
+                "median": float(y_test.median()),
+            }
+
+            # 特徴量統計
+            feature_stats = {}
+            for feature in self.feature_names:
+                if feature in X_train.columns:
+                    feature_stats[feature] = {
+                        "train_mean": float(X_train[feature].mean()),
+                        "train_std": float(X_train[feature].std()),
+                        "test_mean": float(X_test[feature].mean()),
+                        "test_std": float(X_test[feature].std()),
+                    }
+
+            # 精度分析レポート
+            accuracy_report = {
+                "event_type": "accuracy_analysis",
+                "timestamp": datetime.now().isoformat(),
+                "model_config": self.config,
+                "data_summary": {
+                    "train_samples": len(X_train),
+                    "test_samples": len(X_test),
+                    "feature_count": len(self.feature_names),
+                    "features": self.feature_names,
+                },
+                "target_statistics": {"train": train_stats, "test": test_stats},
+                "feature_statistics": feature_stats,
+                "performance_metrics": metrics,
+                "accuracy_assessment": {
+                    "mae_target_achieved": bool(
+                        metrics["test_mae"] <= self.config["target_mae"]
+                    ),
+                    "target_mae": self.config["target_mae"],
+                    "performance_level": self._assess_performance_level(
+                        metrics["test_mae"]
+                    ),
+                    "improvement_potential": self._assess_improvement_potential(
+                        metrics
+                    ),
+                },
+            }
+
+            report_logger.info(
+                safe_text_log(accuracy_report, "ACCURACY_ANALYSIS_REPORT")
+            )
+
+        except Exception as e:
+            logger.error(f"精度分析レポート出力エラー: {e}")
+
+    def _log_training_error(self, error_message: str):
+        """学習エラーレポートをログに出力"""
+        error_report = {
+            "event_type": "training_error",
+            "timestamp": datetime.now().isoformat(),
+            "error_message": error_message,
+            "model_config": self.config,
+            "training_samples": self.training_samples,
+            "feature_count": len(self.feature_names),
+        }
+
+        report_logger.error(safe_text_log(error_report, "TRAINING_ERROR_REPORT"))
+
+    def _assess_performance_level(self, mae: float) -> str:
+        """パフォーマンスレベルを評価"""
+        if mae <= 100:
+            return "優秀"
+        elif mae <= 200:
+            return "良好"
+        elif mae <= 400:
+            return "普通"
+        else:
+            return "改善必要"
+
+    def _assess_improvement_potential(
+        self, metrics: Dict[str, float]
+    ) -> Dict[str, Any]:
+        """改善可能性を評価"""
+        mae = metrics["test_mae"]
+        rmse = metrics["test_rmse"]
+
+        improvement_potential = {
+            "high": mae > 300 or rmse > 500,
+            "medium": 200 < mae <= 300 or 300 < rmse <= 500,
+            "low": mae <= 200 and rmse <= 300,
+            "recommendations": [],
+        }
+
+        # 推奨事項の生成
+        if mae > 300:
+            improvement_potential["recommendations"].append(
+                "特徴量エンジニアリングの見直し"
+            )
+        if rmse > 500:
+            improvement_potential["recommendations"].append("モデルパラメータの調整")
+        if len(self.feature_names) < 5:
+            improvement_potential["recommendations"].append("特徴量の追加")
+
+        return improvement_potential
 
     def create_prediction_plot(
         self, y_test: pd.Series, y_pred: np.ndarray

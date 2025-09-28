@@ -9,10 +9,17 @@ from typing import Dict, Any, Optional, List
 import logging
 from datetime import datetime
 import plotly.graph_objects as go
+import json
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
+from app.config import PREDICTION_REPORT_CONFIG
+from app.utils import safe_text_log
+from app.logging_config import get_logger, get_report_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+# 予測精度レポート用の専用ロガー
+report_logger = get_report_logger()
 
 
 class AnalysisService:
@@ -88,10 +95,17 @@ class AnalysisService:
             self._cached_analysis = analysis_result
 
             logger.info(f"完全分析完了 - 実行時間: {execution_time:.2f}秒")
+
+            # 分析レポートの出力
+            self._log_analysis_report(analysis_result, execution_time)
+
             return analysis_result
 
         except Exception as e:
             logger.error(f"完全分析エラー: {e}")
+            self._log_analysis_error(
+                str(e), (datetime.now() - start_time).total_seconds()
+            )
             return {
                 "status": "error",
                 "error": str(e),
@@ -205,8 +219,8 @@ class AnalysisService:
 
             # 基本統計
             quality_analysis = {
-                "total_records": len(df),
-                "unique_users": df["user_id"].nunique(),
+                "total_records": int(len(df)),
+                "unique_users": int(df["user_id"].nunique()),
                 "date_range": {
                     "start": str(df["created_at"].min())
                     if "created_at" in df.columns
@@ -215,8 +229,10 @@ class AnalysisService:
                     if "created_at" in df.columns
                     else "不明",
                 },
-                "missing_values": df.isnull().sum().to_dict(),
-                "data_types": df.dtypes.to_dict(),
+                "missing_values": {
+                    k: int(v) for k, v in df.isnull().sum().to_dict().items()
+                },
+                "data_types": {k: str(v) for k, v in df.dtypes.to_dict().items()},
                 "outliers": self._detect_outliers(df),
                 "score_distribution": {
                     "mean": float(df["score"].mean()),
@@ -252,8 +268,8 @@ class AnalysisService:
 
             outlier_count = len(df[(df[col] < lower_bound) | (df[col] > upper_bound)])
             outliers[col] = {
-                "count": outlier_count,
-                "percentage": (outlier_count / len(df)) * 100,
+                "count": int(outlier_count),
+                "percentage": float((outlier_count / len(df)) * 100),
                 "bounds": {"lower": float(lower_bound), "upper": float(upper_bound)},
             }
 
@@ -359,6 +375,228 @@ class AnalysisService:
         if analysis["data_info"]["total_samples"] < 1000:
             recommendations.append(
                 "より多くのデータでモデルの安定性を向上させることができます"
+            )
+
+        return recommendations
+
+    def _log_analysis_report(
+        self, analysis_result: Dict[str, Any], execution_time: float
+    ):
+        """分析レポートをログに出力"""
+        if not PREDICTION_REPORT_CONFIG["enabled"]:
+            return
+
+        try:
+            # データ品質分析
+            data_quality = self.analyze_data_quality()
+
+            # 分析レポート
+            analysis_report = {
+                "event_type": "full_analysis",
+                "timestamp": datetime.now().isoformat(),
+                "execution_time": execution_time,
+                "status": analysis_result["status"],
+                "data_quality": data_quality,
+                "model_performance": analysis_result.get("metrics", {}),
+                "data_info": analysis_result.get("data_info", {}),
+                "feature_importance": analysis_result.get("feature_importance", {}),
+                "analysis_summary": {
+                    "total_samples": int(data_quality.get("total_records", 0)),
+                    "unique_users": int(data_quality.get("unique_users", 0)),
+                    "data_range_days": int(
+                        self._calculate_data_range_days(data_quality)
+                    ),
+                    "missing_data_percentage": float(
+                        self._calculate_missing_data_percentage(data_quality)
+                    ),
+                    "outlier_percentage": float(
+                        self._calculate_outlier_percentage(data_quality)
+                    ),
+                },
+            }
+
+            report_logger.info(safe_text_log(analysis_report, "ANALYSIS_REPORT"))
+
+        except Exception as e:
+            logger.error(f"分析レポート出力エラー: {e}")
+
+    def _log_analysis_error(self, error_message: str, execution_time: float):
+        """分析エラーレポートをログに出力"""
+        error_report = {
+            "event_type": "analysis_error",
+            "timestamp": datetime.now().isoformat(),
+            "error_message": error_message,
+            "execution_time": execution_time,
+        }
+
+        report_logger.error(safe_text_log(error_report, "ANALYSIS_ERROR_REPORT"))
+
+    def _calculate_data_range_days(self, data_quality: Dict[str, Any]) -> int:
+        """データの期間（日数）を計算"""
+        try:
+            date_range = data_quality.get("date_range", {})
+            start_date = date_range.get("start")
+            end_date = date_range.get("end")
+
+            if start_date and end_date and start_date != "不明" and end_date != "不明":
+                from datetime import datetime
+
+                start = datetime.strptime(start_date.split()[0], "%Y-%m-%d")
+                end = datetime.strptime(end_date.split()[0], "%Y-%m-%d")
+                return (end - start).days
+            return 0
+        except:
+            return 0
+
+    def _calculate_missing_data_percentage(self, data_quality: Dict[str, Any]) -> float:
+        """欠損データの割合を計算"""
+        try:
+            missing_values = data_quality.get("missing_values", {})
+            total_records = data_quality.get("total_records", 1)
+
+            total_missing = sum(missing_values.values())
+            return (total_missing / (total_records * len(missing_values))) * 100
+        except:
+            return 0.0
+
+    def _calculate_outlier_percentage(self, data_quality: Dict[str, Any]) -> float:
+        """外れ値の割合を計算"""
+        try:
+            outliers = data_quality.get("outliers", {})
+            total_records = data_quality.get("total_records", 1)
+
+            total_outliers = sum(
+                outlier_info.get("count", 0) for outlier_info in outliers.values()
+            )
+            return float((total_outliers / total_records) * 100)
+        except:
+            return 0.0
+
+    def generate_comprehensive_report(self) -> Dict[str, Any]:
+        """包括的な予測精度レポートを生成"""
+        try:
+            # 完全分析の実行
+            analysis_result = self.run_full_analysis()
+
+            if analysis_result["status"] != "completed":
+                return {"status": "error", "message": "分析の実行に失敗しました"}
+
+            # データ品質分析
+            data_quality = self.analyze_data_quality()
+
+            # 包括的レポートの生成
+            comprehensive_report = {
+                "report_generated_at": datetime.now().isoformat(),
+                "report_type": "comprehensive_prediction_accuracy",
+                "executive_summary": {
+                    "model_performance": {
+                        "mae": float(analysis_result["metrics"]["test_mae"]),
+                        "rmse": float(analysis_result["metrics"]["test_rmse"]),
+                        "target_achieved": bool(
+                            analysis_result["metrics"]["test_mae"] <= 200.0
+                        ),
+                        "performance_level": self._assess_overall_performance(
+                            analysis_result["metrics"]
+                        ),
+                    },
+                    "data_quality_score": self._calculate_data_quality_score(
+                        data_quality
+                    ),
+                    "recommendations": self._generate_comprehensive_recommendations(
+                        analysis_result, data_quality
+                    ),
+                },
+                "detailed_analysis": {
+                    "model_metrics": analysis_result["metrics"],
+                    "data_info": analysis_result["data_info"],
+                    "feature_importance": analysis_result["feature_importance"],
+                    "data_quality": data_quality,
+                },
+                "technical_details": {
+                    "execution_time": float(analysis_result["execution_time"]),
+                    "feature_count": int(len(analysis_result["feature_importance"])),
+                    "sample_count": int(analysis_result["data_info"]["total_samples"]),
+                },
+            }
+
+            # レポートをログに出力
+            report_logger.info(
+                safe_text_log(comprehensive_report, "COMPREHENSIVE_REPORT")
+            )
+
+            return {"status": "success", "report": comprehensive_report}
+
+        except Exception as e:
+            logger.error(f"包括的レポート生成エラー: {e}")
+            return {"status": "error", "error": str(e)}
+
+    def _assess_overall_performance(self, metrics: Dict[str, float]) -> str:
+        """全体的なパフォーマンスを評価"""
+        mae = metrics["test_mae"]
+        rmse = metrics["test_rmse"]
+
+        if mae <= 200 and rmse <= 300:
+            return "優秀"
+        elif mae <= 300 and rmse <= 500:
+            return "良好"
+        elif mae <= 500 and rmse <= 800:
+            return "普通"
+        else:
+            return "改善必要"
+
+    def _calculate_data_quality_score(self, data_quality: Dict[str, Any]) -> float:
+        """データ品質スコアを計算（0-100）"""
+        try:
+            score = 100.0
+
+            # 欠損データによる減点
+            missing_percentage = self._calculate_missing_data_percentage(data_quality)
+            score -= min(missing_percentage * 2, 30)  # 最大30点減点
+
+            # 外れ値による減点
+            outlier_percentage = self._calculate_outlier_percentage(data_quality)
+            score -= min(outlier_percentage * 0.5, 20)  # 最大20点減点
+
+            # データ量による調整
+            total_records = data_quality.get("total_records", 0)
+            if total_records < 100:
+                score -= 20
+            elif total_records < 500:
+                score -= 10
+
+            return max(score, 0.0)
+        except:
+            return 50.0
+
+    def _generate_comprehensive_recommendations(
+        self, analysis_result: Dict[str, Any], data_quality: Dict[str, Any]
+    ) -> List[str]:
+        """包括的な改善推奨事項を生成"""
+        recommendations = []
+
+        # モデル性能に基づく推奨事項
+        mae = analysis_result["metrics"]["test_mae"]
+        if mae > 300:
+            recommendations.append("モデルパラメータの調整を検討してください")
+            recommendations.append("特徴量エンジニアリングの見直しを推奨します")
+
+        # データ品質に基づく推奨事項
+        missing_percentage = self._calculate_missing_data_percentage(data_quality)
+        if missing_percentage > 10:
+            recommendations.append("欠損データの補完方法を改善してください")
+
+        outlier_percentage = self._calculate_outlier_percentage(data_quality)
+        if outlier_percentage > 5:
+            recommendations.append("外れ値の処理方法を見直してください")
+
+        # データ量に基づく推奨事項
+        total_records = data_quality.get("total_records", 0)
+        if total_records < 500:
+            recommendations.append("より多くの学習データの収集を推奨します")
+
+        if not recommendations:
+            recommendations.append(
+                "現在のモデル性能は良好です。継続的な監視を推奨します"
             )
 
         return recommendations

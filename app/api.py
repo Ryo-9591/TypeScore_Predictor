@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
+import logging
 
 # プロジェクトルートをPythonパスに追加
 import sys
@@ -19,6 +20,13 @@ sys.path.insert(0, str(project_root))
 # 新しいアーキテクチャのインポート
 from app.services import PredictionService, UserService, AnalysisService
 from app.config import API_CONFIG, SECURITY_CONFIG
+from app.logging_config import get_logger, setup_logging
+
+# ログ設定の初期化
+setup_logging()
+
+# ロガーの設定
+logger = get_logger(__name__)
 
 # FastAPIアプリの初期化
 app = FastAPI(
@@ -53,7 +61,7 @@ def load_model():
     global cached_model, cached_data, cached_metrics
 
     if cached_model is None:
-        print("モデルを読み込み中...")
+        logger.info("モデルを読み込み中...")
         try:
             result = prediction_service.train_model()
             if result["status"] == "success":
@@ -63,11 +71,11 @@ def load_model():
                     "is_trained": prediction_service._is_trained,
                 }
                 cached_metrics = result["metrics"]
-                print("モデル読み込み完了")
+                logger.info("モデル読み込み完了")
             else:
                 raise Exception(result.get("error", "モデル学習に失敗しました"))
         except Exception as e:
-            print(f"モデル学習エラー: {e}")
+            logger.error(f"モデル学習エラー: {e}")
             raise
 
     return cached_model, cached_data, cached_metrics
@@ -140,6 +148,8 @@ async def root():
             "metrics": "/metrics",
             "retrain": "/retrain",
             "analyze": "/analyze",
+            "reports_daily": "/reports/daily",
+            "reports_comprehensive": "/reports/comprehensive",
             "docs": "/docs",
         },
     }
@@ -236,13 +246,13 @@ async def get_model_metrics():
     """モデル性能指標取得"""
     try:
         model_info = prediction_service.get_model_info()
-        print(f"DEBUG: model_info = {model_info}")
+        logger.debug(f"モデル情報: {model_info}")
 
         if not model_info["is_trained"]:
             raise HTTPException(status_code=500, detail="モデルが学習されていません")
 
         metrics = model_info["metrics"]
-        print(f"DEBUG: metrics = {metrics}")
+        logger.debug(f"メトリクス: {metrics}")
 
         return ModelMetricsResponse(
             rmse=metrics["test_rmse"],
@@ -320,18 +330,58 @@ async def health_check():
         }
 
 
+@app.get("/reports/daily")
+async def get_daily_report():
+    """日次予測精度レポート取得"""
+    try:
+        result = prediction_service.generate_daily_report()
+
+        if result["status"] != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("message", "レポート生成に失敗しました"),
+            )
+
+        return result["report"]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"日次レポート取得エラー: {str(e)}")
+
+
+@app.get("/reports/comprehensive")
+async def get_comprehensive_report():
+    """包括的予測精度レポート取得"""
+    try:
+        result = analysis_service.generate_comprehensive_report()
+
+        if result["status"] != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "レポート生成に失敗しました"),
+            )
+
+        return result["report"]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"包括的レポート取得エラー: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
 
     # 起動時に分析を実行
-    print("API起動中...")
+    logger.info("API起動中...")
     try:
         analysis_result = analysis_service.run_full_analysis()
         if analysis_result["status"] == "completed":
-            print("初期分析完了")
+            logger.info("初期分析完了")
         else:
-            print(f"初期分析エラー: {analysis_result.get('error', '不明なエラー')}")
+            logger.error(
+                f"初期分析エラー: {analysis_result.get('error', '不明なエラー')}"
+            )
     except Exception as e:
-        print(f"初期分析エラー: {str(e)}")
+        logger.error(f"初期分析エラー: {str(e)}")
 
     uvicorn.run(app, host=API_CONFIG["host"], port=API_CONFIG["port"])
