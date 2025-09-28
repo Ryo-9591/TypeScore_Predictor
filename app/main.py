@@ -2,12 +2,16 @@ import dash
 from dash import dcc, html, Input, Output, callback
 import dash_bootstrap_components as dbc
 import warnings
+from typing import Dict, Any, Optional
+import plotly.graph_objects as go
 
 # カスタムモジュールのインポート
 from data_loader import DataLoader
 from preprocessor import DataPreprocessor
 from model_trainer import ModelTrainer
 from visualizer import DataVisualizer
+from logger import logger
+from config import config
 
 warnings.filterwarnings("ignore")
 
@@ -16,34 +20,87 @@ class TypeScoreAnalyzer:
     """タイピングスコア予測システムのメインクラス"""
 
     def __init__(self):
-        # データ読み込み
-        self.data_loader = DataLoader()
-        if not self.data_loader.load_data():
-            raise Exception("データの読み込みに失敗しました")
+        """アナライザーの初期化"""
+        try:
+            logger.info("TypeScoreAnalyzerの初期化を開始します...")
 
-        # データ前処理
-        m_user, t_miss, t_score = self.data_loader.get_data()
-        self.preprocessor = DataPreprocessor(m_user, t_miss, t_score)
-        self.merged_data = self.preprocessor.preprocess_data()
-        self.user_mapping = self.preprocessor.get_user_mapping()
+            # データ読み込み
+            self.data_loader = DataLoader()
+            if not self.data_loader.load_data():
+                raise Exception("データの読み込みに失敗しました")
 
-        # モデル訓練
-        feature_columns = self.preprocessor.get_feature_columns()
-        self.model_trainer = ModelTrainer(self.merged_data, feature_columns)
-        self.model_trainer.train_models()
+            # データの検証
+            if not self.data_loader.validate_data():
+                raise Exception("データの検証に失敗しました")
 
-        # 可視化
-        model_performance = self.model_trainer.get_model_performance()
-        self.visualizer = DataVisualizer(self.merged_data, model_performance)
+            # データ前処理
+            m_user, t_miss, t_score = self.data_loader.get_data()
+            self.preprocessor = DataPreprocessor(m_user, t_miss, t_score)
+            self.merged_data = self.preprocessor.preprocess_data()
+            self.user_mapping = self.preprocessor.get_user_mapping()
 
-    def get_user_predictions(self, user_id, diff_id, lang_id):
-        """特定ユーザーのスコア予測"""
+            # モデル訓練
+            feature_columns = self.preprocessor.get_feature_columns()
+            self.model_trainer = ModelTrainer(self.merged_data, feature_columns)
+            if not self.model_trainer.train_models():
+                raise Exception("モデルの訓練に失敗しました")
+
+            # 可視化
+            model_performance = self.model_trainer.get_model_performance()
+            self.visualizer = DataVisualizer(self.merged_data, model_performance)
+
+            logger.info("TypeScoreAnalyzerの初期化が完了しました")
+
+        except Exception as e:
+            logger.exception(f"TypeScoreAnalyzerの初期化中にエラーが発生しました: {e}")
+            raise
+
+    def get_user_predictions(
+        self, user_id: str, diff_id: int, lang_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """特定ユーザーのスコア予測
+
+        Args:
+            user_id (str): ユーザーID
+            diff_id (int): 難易度ID
+            lang_id (int): 言語ID
+
+        Returns:
+            Optional[Dict[str, Any]]: 予測結果、失敗時はNone
+        """
         return self.model_trainer.get_user_predictions(user_id, diff_id, lang_id)
+
+    def get_system_status(self) -> Dict[str, Any]:
+        """システムの状態を返す
+
+        Returns:
+            Dict[str, Any]: システム状態情報
+        """
+        try:
+            data_summary = self.preprocessor.get_data_summary()
+            model_summary = self.model_trainer.get_model_summary()
+
+            return {
+                "status": "healthy",
+                "data": data_summary,
+                "models": model_summary,
+                "available_users": len(self.user_mapping),
+                "available_modes": len(self.model_trainer.get_available_modes()),
+            }
+        except Exception as e:
+            logger.exception(f"システム状態の取得中にエラーが発生しました: {e}")
+            return {"status": "error", "error": str(e)}
 
 
 # アプリケーションの初期化
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
-analyzer = TypeScoreAnalyzer()
+try:
+    logger.info("Dashアプリケーションの初期化を開始します...")
+    app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+    analyzer = TypeScoreAnalyzer()
+    logger.info("Dashアプリケーションの初期化が完了しました")
+except Exception as e:
+    logger.exception(f"アプリケーション初期化中にエラーが発生しました: {e}")
+    raise
 
 # レイアウトの定義
 app.layout = dbc.Container(
@@ -196,110 +253,160 @@ app.layout = dbc.Container(
         Input("language-dropdown", "value"),
     ],
 )
-def update_dashboard(selected_user, selected_difficulty, selected_language):
-    # 予測結果の取得
-    prediction_result = analyzer.get_user_predictions(
-        selected_user, selected_difficulty, selected_language
-    )
+def update_dashboard(
+    selected_user: str, selected_difficulty: int, selected_language: int
+) -> tuple:
+    """ダッシュボードの更新
 
-    if prediction_result:
-        # 予測結果をカード形式で表示
-        prediction_display = dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
-                                    [
-                                        html.H6("ユーザー", className="text-light"),
-                                        html.H4(
-                                            prediction_result["username"],
-                                            className="text-info",
-                                        ),
-                                    ]
-                                )
-                            ],
-                            className="text-center",
-                        )
-                    ],
-                    width=3,
-                ),
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
-                                    [
-                                        html.H6("モード", className="text-light"),
-                                        html.H4(
-                                            f"{prediction_result['difficulty']} - {prediction_result['language']}",
-                                            className="text-warning",
-                                        ),
-                                    ]
-                                )
-                            ],
-                            className="text-center",
-                        )
-                    ],
-                    width=3,
-                ),
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
-                                    [
-                                        html.H6("予測スコア", className="text-light"),
-                                        html.H4(
-                                            f"{prediction_result['predicted_score']:.0f}",
-                                            className="text-success",
-                                        ),
-                                    ]
-                                )
-                            ],
-                            className="text-center",
-                        )
-                    ],
-                    width=3,
-                ),
-                dbc.Col(
-                    [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
-                                    [
-                                        html.H6("実際のスコア", className="text-light"),
-                                        html.H4(
-                                            f"{prediction_result['actual_score']:.0f}",
-                                            className="text-danger",
-                                        ),
-                                    ]
-                                )
-                            ],
-                            className="text-center",
-                        )
-                    ],
-                    width=3,
-                ),
-            ],
-            className="g-3",
+    Args:
+        selected_user (str): 選択されたユーザーID
+        selected_difficulty (int): 選択された難易度ID
+        selected_language (int): 選択された言語ID
+
+    Returns:
+        tuple: (予測結果表示, 相関プロット, モデル性能プロット)
+    """
+    try:
+        logger.debug(
+            f"ダッシュボード更新: ユーザー={selected_user}, 難易度={selected_difficulty}, 言語={selected_language}"
         )
-    else:
-        prediction_display = dbc.Alert(
-            "該当モードのデータが不足しています",
-            color="warning",
+
+        # 予測結果の取得
+        prediction_result = analyzer.get_user_predictions(
+            selected_user, selected_difficulty, selected_language
+        )
+
+        if prediction_result:
+            # 予測結果をカード形式で表示
+            prediction_display = dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dbc.Card(
+                                [
+                                    dbc.CardBody(
+                                        [
+                                            html.H6("ユーザー", className="text-light"),
+                                            html.H4(
+                                                prediction_result["username"],
+                                                className="text-info",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                className="text-center",
+                            )
+                        ],
+                        width=3,
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Card(
+                                [
+                                    dbc.CardBody(
+                                        [
+                                            html.H6("モード", className="text-light"),
+                                            html.H4(
+                                                f"{prediction_result['difficulty']} - {prediction_result['language']}",
+                                                className="text-warning",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                className="text-center",
+                            )
+                        ],
+                        width=3,
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Card(
+                                [
+                                    dbc.CardBody(
+                                        [
+                                            html.H6(
+                                                "予測スコア", className="text-light"
+                                            ),
+                                            html.H4(
+                                                f"{prediction_result['predicted_score']:.0f}",
+                                                className="text-success",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                className="text-center",
+                            )
+                        ],
+                        width=3,
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Card(
+                                [
+                                    dbc.CardBody(
+                                        [
+                                            html.H6(
+                                                "実際のスコア", className="text-light"
+                                            ),
+                                            html.H4(
+                                                f"{prediction_result['actual_score']:.0f}",
+                                                className="text-danger",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                className="text-center",
+                            )
+                        ],
+                        width=3,
+                    ),
+                ],
+                className="g-3",
+            )
+        else:
+            prediction_display = dbc.Alert(
+                "該当モードのデータが不足しています",
+                color="warning",
+                className="text-center",
+            )
+
+        # グラフの作成（可視化モジュールを使用）
+        correlation_fig = analyzer.visualizer.create_correlation_plot(
+            selected_difficulty, selected_language
+        )
+        performance_fig = analyzer.visualizer.create_model_performance_plot()
+
+        logger.debug("ダッシュボードの更新が完了しました")
+        return prediction_display, correlation_fig, performance_fig
+
+    except Exception as e:
+        logger.exception(f"ダッシュボード更新中にエラーが発生しました: {e}")
+        error_display = dbc.Alert(
+            f"エラーが発生しました: {str(e)}",
+            color="danger",
             className="text-center",
         )
 
-    # グラフの作成（可視化モジュールを使用）
-    correlation_fig = analyzer.visualizer.create_correlation_plot(
-        selected_difficulty, selected_language
-    )
-    performance_fig = analyzer.visualizer.create_model_performance_plot()
+        # 空のグラフを作成
+        empty_fig = go.Figure()
+        empty_fig.add_annotation(
+            text="エラーが発生しました",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+        )
 
-    return prediction_display, correlation_fig, performance_fig
+        return error_display, empty_fig, empty_fig
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050)
+    try:
+        logger.info(
+            f"アプリケーションを開始します: {config.app.host}:{config.app.port}"
+        )
+        app.run(debug=config.app.debug, host=config.app.host, port=config.app.port)
+    except Exception as e:
+        logger.exception(f"アプリケーション実行中にエラーが発生しました: {e}")
+        raise
