@@ -10,9 +10,6 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import LabelEncoder
 from typing import Tuple, Dict, Any
-import logging
-import plotly.graph_objects as go
-import json
 from datetime import datetime
 
 from app.utils import safe_text_log
@@ -385,69 +382,3 @@ class ModelTrainer:
             improvement_potential["recommendations"].append("特徴量の追加")
 
         return improvement_potential
-
-    def create_prediction_plot(
-        self, y_test: pd.Series, y_pred: np.ndarray
-    ) -> go.Figure:
-        """
-        予測結果の散布図を作成
-
-        Args:
-            y_test: 実測値
-            y_pred: 予測値
-
-        Returns:
-            PlotlyのFigureオブジェクト
-        """
-        logger.info("予測結果の散布図を作成中...")
-
-        fig = go.Figure()
-
-        # 散布図の追加
-        fig.add_trace(
-            go.Scatter(
-                x=y_test,
-                y=y_pred,
-                mode="markers",
-                marker=dict(
-                    size=8,
-                    opacity=0.6,
-                    color="#007bff",
-                    line=dict(color="#ffffff", width=1),
-                ),
-                name="予測値 vs 実測値",
-            )
-        )
-
-        # 理想的な予測線（y=x）を追加
-        min_val = min(y_test.min(), y_pred.min())
-        max_val = max(y_test.max(), y_pred.max())
-        fig.add_trace(
-            go.Scatter(
-                x=[min_val, max_val],
-                y=[min_val, max_val],
-                mode="lines",
-                line=dict(color="#dc3545", width=3, dash="dash"),
-                name="理想的な予測線",
-            )
-        )
-
-        # ダークテーマを適用
-        title_text = f"予測スコア vs 実測スコア<br>RMSE: {self.metrics['test_rmse']:.2f}, MAE: {self.metrics['test_mae']:.2f}"
-        fig.update_layout(
-            title=title_text,
-            xaxis_title="実測スコア",
-            yaxis_title="予測スコア",
-            width=800,
-            height=600,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
-        logger.info("予測散布図を作成しました")
-        return fig

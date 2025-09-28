@@ -53,7 +53,6 @@ analysis_service = AnalysisService()
 cached_model = None
 cached_data = None
 cached_metrics = None
-cached_analysis_data = None
 
 
 def load_model():

@@ -6,10 +6,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
-import logging
 from datetime import datetime
 import plotly.graph_objects as go
-import json
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
 from app.config import PREDICTION_REPORT_CONFIG
@@ -55,10 +53,10 @@ class AnalysisService:
             # 予測結果の可視化
             y_pred = model.predict(X.iloc[-int(len(X) * 0.2) :])  # テストデータの予測
             y_test = y.iloc[-int(len(y) * 0.2) :]
-            scatter_fig = self.model_trainer.create_prediction_plot(y_test, y_pred)
+            scatter_fig = self.create_prediction_plot(y_test, y_pred)
 
             # 特徴量重要度分析
-            importance_fig = self._create_feature_importance_chart(model, X.columns)
+            importance_fig = self.create_feature_importance_chart(model, X.columns)
 
             # データ情報
             data_info = self.data_processor.get_data_info()
@@ -203,9 +201,72 @@ class AnalysisService:
         logger.info("特徴量重要度チャートを作成しました")
         return fig
 
-    def _create_feature_importance_chart(self, model, feature_names) -> go.Figure:
-        """内部用の特徴量重要度チャート作成メソッド"""
-        return self.create_feature_importance_chart(model, feature_names)
+    def create_prediction_plot(
+        self, y_test: pd.Series, y_pred: np.ndarray
+    ) -> go.Figure:
+        """
+        予測結果の散布図を作成
+
+        Args:
+            y_test: 実測値
+            y_pred: 予測値
+
+        Returns:
+            PlotlyのFigureオブジェクト
+        """
+        logger.info("予測結果の散布図を作成中...")
+
+        fig = go.Figure()
+
+        # 散布図の追加
+        fig.add_trace(
+            go.Scatter(
+                x=y_test,
+                y=y_pred,
+                mode="markers",
+                marker=dict(
+                    size=8,
+                    opacity=0.6,
+                    color="#007bff",
+                    line=dict(color="#ffffff", width=1),
+                ),
+                name="予測値 vs 実測値",
+            )
+        )
+
+        # 理想的な予測線（y=x）を追加
+        min_val = min(y_test.min(), y_pred.min())
+        max_val = max(y_test.max(), y_pred.max())
+        fig.add_trace(
+            go.Scatter(
+                x=[min_val, max_val],
+                y=[min_val, max_val],
+                mode="lines",
+                line=dict(color="#dc3545", width=3, dash="dash"),
+                name="理想的な予測線",
+            )
+        )
+
+        # ダークテーマを適用
+        metrics = self.model_trainer.metrics
+        title_text = f"予測スコア vs 実測スコア<br>RMSE: {metrics['test_rmse']:.2f}, MAE: {metrics['test_mae']:.2f}"
+        fig.update_layout(
+            title=title_text,
+            xaxis_title="実測スコア",
+            yaxis_title="予測スコア",
+            width=800,
+            height=600,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#ffffff", size=12),
+            title_font=dict(color="#ffffff", size=16),
+            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
+            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
+        )
+
+        logger.info("予測散布図を作成しました")
+        return fig
 
     def analyze_data_quality(self) -> Dict[str, Any]:
         """

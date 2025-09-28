@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
-import logging
 
 # プロジェクトルートをPythonパスに追加
 project_root = Path(__file__).parent.parent

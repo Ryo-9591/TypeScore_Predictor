@@ -9,22 +9,12 @@ import os
 # プロジェクトルートの設定
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "output"
-CONFIG_DIR = PROJECT_ROOT / "config"
 
 # データファイルの設定
 DATA_FILES = {
     "users": DATA_DIR / "m_user.csv",
     "misses": DATA_DIR / "t_miss.csv",
     "scores": DATA_DIR / "t_score.csv",
-}
-
-# 出力ファイルの設定
-OUTPUT_FILES = {
-    "importance_csv": OUTPUT_DIR / "feature_importance.csv",
-    "analysis_summary": OUTPUT_DIR / "feature_analysis_summary.txt",
-    "prediction_plot": OUTPUT_DIR / "prediction_scatter_plot.html",
-    "importance_chart": OUTPUT_DIR / "feature_importance_chart.html",
 }
 
 # モデル設定
@@ -87,21 +77,6 @@ API_CONFIG = {
     "version": "1.0.0",
 }
 
-# データベース設定（将来の拡張用）
-DATABASE_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", "5432")),
-    "name": os.getenv("DB_NAME", "typescore_db"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", ""),
-}
-
-# キャッシュ設定
-CACHE_CONFIG = {
-    "enabled": True,
-    "ttl": 3600,  # 1時間
-    "max_size": 1000,
-}
 
 # セキュリティ設定
 SECURITY_CONFIG = {
@@ -114,25 +89,3 @@ SECURITY_CONFIG = {
 # 環境設定
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEBUG = ENVIRONMENT == "development"
-
-# 全設定をまとめた辞書
-ALL_CONFIG = {
-    "project_root": PROJECT_ROOT,
-    "data_dir": DATA_DIR,
-    "output_dir": OUTPUT_DIR,
-    "config_dir": CONFIG_DIR,
-    "data_files": DATA_FILES,
-    "output_files": OUTPUT_FILES,
-    "model": MODEL_CONFIG,
-    "cv": CV_CONFIG,
-    "target_accuracy": TARGET_ACCURACY,
-    "log": LOG_CONFIG,
-    "prediction_report": PREDICTION_REPORT_CONFIG,
-    "dashboard": DASHBOARD_CONFIG,
-    "api": API_CONFIG,
-    "database": DATABASE_CONFIG,
-    "cache": CACHE_CONFIG,
-    "security": SECURITY_CONFIG,
-    "environment": ENVIRONMENT,
-    "debug": DEBUG,
-}
