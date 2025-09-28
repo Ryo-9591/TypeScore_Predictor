@@ -1,494 +1,390 @@
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
 import dash
 from dash import dcc, html, Input, Output, callback
-import plotly.graph_objs as go
+import dash_bootstrap_components as dbc
+from datetime import datetime
+import warnings
 
-# 共通ユーティリティとアーキテクチャのインポート
-from app.utils.common import get_logger, get_jst_time, format_datetime
-from app.services import PredictionService, UserService, AnalysisService
-from app.ui.components import (
-    StatsCard,
-    StatsGrid,
-    PredictionChart,
-    FeatureImportanceChart,
-    UserPerformanceChart,
-    UserSelector,
-)
-from app.ui.styles import get_layout_styles, get_css_styles
-from app.config import DASHBOARD_CONFIG
-from app.logging_config import setup_logging
-
-# ログ設定の初期化
-setup_logging()
-logger = get_logger(__name__)
-
-# Dashアプリの初期化
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
-app.title = DASHBOARD_CONFIG["title"]
-
-# サービス層の初期化
-prediction_service = PredictionService()
-user_service = UserService()
-analysis_service = AnalysisService()
-
-# グローバル変数（データキャッシュ用）
-cached_analysis_data = None
-cached_user_data = None  # ユーザーデータのキャッシュ
+warnings.filterwarnings("ignore")
 
 
-def load_data_and_model():
-    """データとモデルを読み込んでキャッシュ"""
-    global cached_analysis_data
+class TypeScoreAnalyzer:
+    def __init__(self):
+        self.m_user = pd.read_csv("data/m_user.csv")
+        self.t_miss = pd.read_csv("data/t_miss.csv")
+        self.t_score = pd.read_csv("data/t_score.csv")
+        self.models = {}
+        self.model_performance = {}
 
-    if cached_analysis_data is None:
-        logger.info("データとモデルの読み込み中...")
-        start_time = datetime.now()
+        # データの前処理
+        self.preprocess_data()
 
-        # 分析サービスを使用してデータとモデルを読み込み
-        cached_analysis_data = analysis_service.run_full_analysis()
+        # モデルの訓練
+        self.train_models()
 
-        end_time = datetime.now()
-        execution_time = (end_time - start_time).total_seconds()
+    def preprocess_data(self):
+        """データの前処理"""
+        # ユーザー名のマッピング
+        self.user_mapping = dict(zip(self.m_user["user_id"], self.m_user["username"]))
 
-        logger.info(f"データとモデルの読み込み完了 - 実行時間: {execution_time:.2f}秒")
+        # スコアデータにユーザー名を追加
+        self.t_score["username"] = self.t_score["user_id"].map(self.user_mapping)
 
-    return cached_analysis_data
+        # ミスタイプデータをユーザー別に集計
+        self.miss_summary = (
+            self.t_miss.groupby("user_id")
+            .agg({"miss_count": ["sum", "mean", "std", "count"]})
+            .round(2)
+        )
+        self.miss_summary.columns = [
+            "total_misses",
+            "avg_misses",
+            "std_misses",
+            "miss_types",
+        ]
+        self.miss_summary = self.miss_summary.reset_index()
 
+        # スコアデータとミスタイプデータを結合
+        self.merged_data = self.t_score.merge(
+            self.miss_summary, on="user_id", how="left"
+        ).fillna(0)
 
-def get_user_data() -> Dict[str, Any]:
-    """ユーザーデータを取得（キャッシュ機能付き）"""
-    global cached_user_data
+        # 特徴量の作成
+        self.merged_data["miss_rate"] = (
+            self.merged_data["total_misses"] / self.merged_data["typing_count"]
+        )
+        self.merged_data["miss_rate"] = self.merged_data["miss_rate"].fillna(0)
 
-    if cached_user_data is None:
-        users = user_service.get_all_users()
-        cached_user_data = {"users": users}
-        logger.info(f"ユーザーデータをキャッシュに保存: {len(users)}人")
-
-    return cached_user_data
-
-
-def get_user_stats(user_id: str) -> Optional[Dict[str, Any]]:
-    """指定されたユーザーの統計データを取得"""
-    return user_service.get_user_stats(user_id)
-
-
-def get_user_timeseries(user_id: str) -> Optional[Dict[str, Any]]:
-    """指定されたユーザーの時系列データを取得"""
-    return user_service.get_user_timeseries(user_id)
-
-
-def create_user_performance_chart(
-    selected_user: Optional[str], user_stats: Optional[Dict[str, Any]]
-) -> html.Div:
-    """ユーザーパフォーマンスチャートを作成"""
-    if selected_user:
-        timeseries_data = get_user_timeseries(selected_user)
-        if timeseries_data:
-            return UserPerformanceChart.create_with_timeseries(
-                timeseries_data, selected_user
-            )
-
-    return UserPerformanceChart.create(selected_user, user_stats)
-
-
-def create_user_stats_display(
-    selected_user: Optional[str],
-    user_stats: Optional[Dict[str, Any]],
-    user_chart: html.Div,
-) -> html.Div:
-    """ユーザー統計表示を作成"""
-    if not selected_user:
-        return html.Div(
-            [
-                html.P(
-                    "ユーザーを選択してください",
-                    style={
-                        "color": "#cccccc",
-                        "textAlign": "center",
-                        "padding": "20px",
-                    },
-                )
-            ],
-            style={
-                "width": "100%",
-                "overflow": "hidden",
-                "boxSizing": "border-box",
-            },
+        # 難易度と言語のラベル
+        self.merged_data["difficulty_label"] = self.merged_data["diff_id"].map(
+            {1: "Easy", 2: "Normal", 3: "Hard"}
+        )
+        self.merged_data["language_label"] = self.merged_data["lang_id"].map(
+            {1: "Japanese", 2: "English"}
         )
 
-    if not user_stats:
-        return html.Div(
+    def train_models(self):
+        """各モード（難易度×言語）ごとにモデルを訓練"""
+        # 特徴量の定義
+        feature_columns = [
+            "diff_id",
+            "lang_id",
+            "accuracy",
+            "typing_count",
+            "total_misses",
+            "avg_misses",
+            "miss_rate",
+        ]
+
+        for diff_id in [1, 2, 3]:
+            for lang_id in [1, 2]:
+                mode_key = f"diff_{diff_id}_lang_{lang_id}"
+
+                # 該当モードのデータを抽出
+                mode_data = self.merged_data[
+                    (self.merged_data["diff_id"] == diff_id)
+                    & (self.merged_data["lang_id"] == lang_id)
+                ].copy()
+
+                if len(mode_data) < 10:  # データが少なすぎる場合はスキップ
+                    continue
+
+                X = mode_data[feature_columns]
+                y = mode_data["score"]
+
+                # 訓練・テスト分割
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
+
+                # モデルの訓練
+                model = RandomForestRegressor(n_estimators=100, random_state=42)
+                model.fit(X_train, y_train)
+
+                # 予測と評価
+                y_pred = model.predict(X_test)
+                mse = mean_squared_error(y_test, y_pred)
+                r2 = r2_score(y_test, y_pred)
+
+                self.models[mode_key] = model
+                self.model_performance[mode_key] = {
+                    "mse": mse,
+                    "r2": r2,
+                    "data_size": len(mode_data),
+                    "test_size": len(X_test),
+                }
+
+    def get_user_predictions(self, user_id, diff_id, lang_id):
+        """特定ユーザーのスコア予測"""
+        mode_key = f"diff_{diff_id}_lang_{lang_id}"
+
+        if mode_key not in self.models:
+            return None
+
+        # ユーザーの最新データを取得
+        user_data = self.merged_data[
+            (self.merged_data["user_id"] == user_id)
+            & (self.merged_data["diff_id"] == diff_id)
+            & (self.merged_data["lang_id"] == lang_id)
+        ]
+
+        if len(user_data) == 0:
+            return None
+
+        # 最新のレコードを使用
+        latest_record = user_data.iloc[-1]
+        feature_columns = [
+            "diff_id",
+            "lang_id",
+            "accuracy",
+            "typing_count",
+            "total_misses",
+            "avg_misses",
+            "miss_rate",
+        ]
+
+        X = latest_record[feature_columns].values.reshape(1, -1)
+        prediction = self.models[mode_key].predict(X)[0]
+
+        return {
+            "predicted_score": prediction,
+            "actual_score": latest_record["score"],
+            "username": latest_record["username"],
+            "difficulty": latest_record["difficulty_label"],
+            "language": latest_record["language_label"],
+        }
+
+
+# アプリケーションの初期化
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+analyzer = TypeScoreAnalyzer()
+
+# レイアウトの定義
+app.layout = dbc.Container(
+    [
+        dbc.Row(
             [
-                html.Div(
+                dbc.Col(
                     [
-                        html.P(
-                            "データを取得できませんでした",
-                            style={
-                                "color": "#cccccc",
-                                "margin": "5px 0",
-                                "textAlign": "center",
-                                "padding": "20px",
-                            },
+                        html.H1(
+                            "TypeScore Predictor Dashboard",
+                            className="text-center mb-4",
+                        ),
+                        html.Hr(),
+                    ]
+                )
+            ]
+        ),
+        # ユーザー選択
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        html.H3("ユーザー選択"),
+                        dcc.Dropdown(
+                            id="user-dropdown",
+                            options=[
+                                {"label": username, "value": user_id}
+                                for user_id, username in analyzer.user_mapping.items()
+                            ],
+                            value=list(analyzer.user_mapping.keys())[0],
+                            className="mb-3",
                         ),
                     ],
-                    style={
-                        "flex": "1",
-                        "minWidth": "300px",
-                        "marginRight": "15px",
-                        "overflow": "hidden",
-                    },
+                    width=6,
                 ),
-                html.Div(
-                    [user_chart],
-                    style={
-                        "width": "100%",
-                        "height": "500px",
-                    },
-                ),
-            ],
-            style={
-                "display": "flex",
-                "flexDirection": "column",
-                "width": "100%",
-            },
-        )
-
-    # ユーザー統計情報とグラフを組み合わせて表示
-    user_stats_info = StatsCard.create_user_stats_card(user_stats, selected_user)
-
-    return html.Div(
-        [
-            user_stats_info,
-            html.Div(
-                [user_chart],
-                style={
-                    "width": "100%",
-                    "height": "500px",
-                },
-            ),
-        ],
-        style={
-            "display": "flex",
-            "flexDirection": "column",
-            "width": "100%",
-        },
-    )
-
-
-def create_feature_importance_panel(
-    feature_importance: Dict[str, Any], importance_fig: go.Figure = None
-) -> html.Div:
-    """特徴量重要度パネルを作成"""
-    return FeatureImportanceChart.create_panel(feature_importance, importance_fig)
-
-
-def create_prediction_accuracy_panel(
-    metrics: Dict[str, Any], scatter_fig: go.Figure = None
-) -> html.Div:
-    """予測精度分析パネルを作成"""
-    return PredictionChart.create_panel(scatter_fig, metrics)
-
-
-# レイアウトスタイルを取得
-layout_styles = get_layout_styles()
-
-# レイアウト定義
-app.layout = html.Div(
-    [
-        # ヘッダー部分
-        html.Div(
-            [
-                # 左側：アイコンとタイトル
-                html.Div(
+                dbc.Col(
                     [
-                        html.Div(
-                            "📊",
-                            style={
-                                "fontSize": "24px",
-                                "marginRight": "10px",
-                                "color": "#ff6b6b",
-                            },
-                        ),
-                        html.Div(
+                        html.H3("モード選択"),
+                        dbc.Row(
                             [
-                                html.H1(
-                                    "TypeScore Predictor",
-                                    style={
-                                        "color": "#ffffff",
-                                        "fontSize": "28px",
-                                        "margin": "0",
-                                        "fontWeight": "bold",
-                                    },
+                                dbc.Col(
+                                    [
+                                        html.Label("難易度"),
+                                        dcc.Dropdown(
+                                            id="difficulty-dropdown",
+                                            options=[
+                                                {"label": "Easy", "value": 1},
+                                                {"label": "Normal", "value": 2},
+                                                {"label": "Hard", "value": 3},
+                                            ],
+                                            value=2,
+                                        ),
+                                    ],
+                                    width=6,
                                 ),
-                                html.P(
-                                    "Track Typing Performance Analytics",
-                                    style={
-                                        "color": "#ffffff",
-                                        "fontSize": "14px",
-                                        "margin": "5px 0 0 0",
-                                        "opacity": "0.8",
-                                    },
+                                dbc.Col(
+                                    [
+                                        html.Label("言語"),
+                                        dcc.Dropdown(
+                                            id="language-dropdown",
+                                            options=[
+                                                {"label": "Japanese", "value": 1},
+                                                {"label": "English", "value": 2},
+                                            ],
+                                            value=1,
+                                        ),
+                                    ],
+                                    width=6,
                                 ),
                             ]
                         ),
                     ],
-                    style={"display": "flex", "alignItems": "center"},
-                ),
-                # 右側：最終更新時刻
-                html.Div(
-                    id="last-updated",
-                    style={
-                        "color": "#ffa500",
-                        "fontSize": "12px",
-                        "textAlign": "right",
-                    },
+                    width=6,
                 ),
             ],
-            style=layout_styles["header"],
+            className="mb-4",
         ),
-        # ①統計カードのコンテナ（4つのカード）
-        html.Div(
-            id="global-stats-grid",
-            style=layout_styles["stats_container"],
-        ),
-        # 下部全体のコンテナ
-        html.Div(
+        # 予測結果表示
+        dbc.Row(
             [
-                # ②下部左のユーザー選択と最新データコンテナ
-                html.Div(
+                dbc.Col(
                     [
-                        html.H3(
-                            "ユーザースコア推移と予測",
-                            style={
-                                "color": "#ffffff",
-                                "marginBottom": "8px",
-                                "fontSize": "16px",
-                                "textAlign": "center",
-                            },
-                        ),
-                        html.Div(id="user-selector-container"),
-                        html.Div(id="user-stats-display"),
-                        # ユーザー選択状態を保持するための隠しコンポーネント
-                        dcc.Store(id="selected-user-store", data=None),
-                    ],
-                    style=layout_styles["user_container"],
-                ),
-                # ③特徴量重要度分析・予測精度分析コンテナ（2つのカード）
-                html.Div(
-                    [
-                        # 上部：特徴量重要度分析
-                        html.Div(
-                            id="center-panel",
-                            style=layout_styles["analysis_panel"],
-                        ),
-                        # 下部：予測精度分析
-                        html.Div(
-                            id="right-panel",
-                            style=layout_styles["analysis_panel"],
+                        html.H3("スコア予測結果"),
+                        dbc.Card(
+                            [
+                                dbc.CardBody(
+                                    [
+                                        html.H4(
+                                            id="prediction-result",
+                                            className="text-center",
+                                        )
+                                    ]
+                                )
+                            ]
                         ),
                     ],
-                    style=layout_styles["analysis_container"],
-                ),
+                    width=12,
+                )
             ],
-            style=layout_styles["bottom_container"],
+            className="mb-4",
         ),
-        # 自動更新（グローバル統計のみ、ユーザー選択は独立）
-        dcc.Interval(
-            id="interval-component",
-            interval=300 * 1000,  # 5分ごとに更新（グローバル統計のみ）
-            n_intervals=0,
+        # グラフ表示エリア
+        dbc.Row(
+            [
+                dbc.Col([dcc.Graph(id="score-correlation-plot")], width=6),
+                dbc.Col([dcc.Graph(id="model-performance-plot")], width=6),
+            ],
+            className="mb-4",
         ),
+        dbc.Row([dbc.Col([dcc.Graph(id="user-comparison-plot")], width=12)]),
     ],
-    style=layout_styles["main_container"],
+    fluid=True,
 )
 
 
-@callback(
-    [Output("global-stats-grid", "children"), Output("last-updated", "children")],
-    Input("interval-component", "n_intervals"),
-)
-def update_global_stats(n: int) -> Tuple[List[html.Div], str]:
-    """グローバル統計カードと最終更新時刻を更新"""
-    try:
-        # データとモデルを読み込み
-        analysis_data = load_data_and_model()
-
-        if analysis_data["status"] != "completed":
-            error_card = html.Div(
-                f"エラー: {analysis_data.get('error', '不明なエラー')}",
-                style={
-                    "backgroundColor": "#2d2d2d",
-                    "border": "1px solid #ff6b6b",
-                    "borderRadius": "8px",
-                    "padding": "15px",
-                    "textAlign": "center",
-                    "color": "#ff6b6b",
-                },
-            )
-            return [error_card] * 4, "エラーが発生しました"
-
-        metrics = analysis_data["metrics"]
-        data_info = analysis_data["data_info"]
-
-        # 現在時刻を取得
-        current_time = format_datetime(get_jst_time(), "%Y年%m月%d日 %H:%M (JST)")
-
-        # 統計カードを作成
-        stats_cards = StatsGrid.create_global_stats_grid(
-            metrics, data_info, analysis_data
-        )
-        return stats_cards, f"最終更新: {current_time}"
-
-    except Exception as e:
-        error_card = html.Div(
-            f"エラー: {str(e)}",
-            style={
-                "backgroundColor": "#2d2d2d",
-                "border": "1px solid #ff6b6b",
-                "borderRadius": "8px",
-                "padding": "15px",
-                "textAlign": "center",
-                "color": "#ff6b6b",
-            },
-        )
-        return [error_card] * 4, "エラーが発生しました"
-
-
-@callback(
+# コールバック関数
+@app.callback(
     [
-        Output("user-selector-container", "children"),
-        Output("center-panel", "children"),
-        Output("right-panel", "children"),
+        Output("prediction-result", "children"),
+        Output("score-correlation-plot", "figure"),
+        Output("model-performance-plot", "figure"),
+        Output("user-comparison-plot", "figure"),
     ],
-    [Input("interval-component", "n_intervals")],
-)
-def render_panels(n: int) -> Tuple[html.Div, html.Div, html.Div]:
-    """パネルをレンダリング"""
-    try:
-        # データとモデルを読み込み
-        analysis_data = load_data_and_model()
-
-        if analysis_data["status"] != "completed":
-            error_div = html.Div(
-                f"エラー: {analysis_data.get('error', '不明なエラー')}",
-                style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
-            )
-            return error_div, error_div, error_div
-
-        # ユーザーデータを取得
-        user_data = get_user_data()
-        users = user_data["users"]
-
-        # ユーザー選択コンポーネントを作成（1番目のユーザーをデフォルト選択）
-        default_user = users[0] if users else None
-        user_selector = UserSelector.create(users, default_user)
-
-        # グラフオブジェクトを取得
-        scatter_fig = None
-        importance_fig = None
-
-        if "scatter_fig" in analysis_data and analysis_data["scatter_fig"]:
-            scatter_fig = go.Figure(analysis_data["scatter_fig"])
-
-        if "importance_fig" in analysis_data and analysis_data["importance_fig"]:
-            importance_fig = go.Figure(analysis_data["importance_fig"])
-
-        # 中央パネルと右パネルを作成
-        center_panel = create_feature_importance_panel(
-            analysis_data["feature_importance"], importance_fig
-        )
-        right_panel = create_prediction_accuracy_panel(
-            analysis_data["metrics"], scatter_fig
-        )
-
-        return user_selector, center_panel, right_panel
-
-    except Exception as e:
-        error_div = html.Div(
-            f"エラー: {str(e)}",
-            style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
-        )
-        return error_div, error_div, error_div
-
-
-@callback(
     [
-        Output("user-stats-display", "children"),
-        Output("selected-user-store", "data"),
+        Input("user-dropdown", "value"),
+        Input("difficulty-dropdown", "value"),
+        Input("language-dropdown", "value"),
     ],
-    [Input("user-selector", "value")],
 )
-def update_user_display(selected_user: Optional[str]) -> Tuple[html.Div, str]:
-    """ユーザー選択時の表示更新"""
-    try:
-        if not selected_user:
-            return (
-                html.Div(
-                    [
-                        html.P(
-                            "ユーザーを選択してください",
-                            style={
-                                "color": "#cccccc",
-                                "textAlign": "center",
-                                "padding": "20px",
-                            },
-                        )
-                    ]
-                ),
-                None,
-            )
+def update_dashboard(selected_user, selected_difficulty, selected_language):
+    # 予測結果の取得
+    prediction_result = analyzer.get_user_predictions(
+        selected_user, selected_difficulty, selected_language
+    )
 
-        # 選択されたユーザーの統計を取得
-        user_stats = get_user_stats(selected_user)
+    if prediction_result:
+        prediction_text = f"""
+        ユーザー: {prediction_result["username"]} | 
+        モード: {prediction_result["difficulty"]} - {prediction_result["language"]} | 
+        予測スコア: {prediction_result["predicted_score"]:.0f} | 
+        実際のスコア: {prediction_result["actual_score"]:.0f}
+        """
+    else:
+        prediction_text = "該当モードのデータが不足しています"
 
-        # ユーザー別パフォーマンスチャートを作成
-        user_chart = create_user_performance_chart(selected_user, user_stats)
+    # ミスタイプとスコアの相関プロット
+    correlation_data = analyzer.merged_data[
+        (analyzer.merged_data["diff_id"] == selected_difficulty)
+        & (analyzer.merged_data["lang_id"] == selected_language)
+    ]
 
-        # ユーザー統計情報の表示
-        user_stats_display = create_user_stats_display(
-            selected_user, user_stats, user_chart
+    correlation_fig = px.scatter(
+        correlation_data,
+        x="total_misses",
+        y="score",
+        color="username",
+        title=f"ミスタイプ数とスコアの相関 (難易度{selected_difficulty} - 言語{selected_language})",
+        labels={"total_misses": "総ミスタイプ数", "score": "スコア"},
+    )
+
+    # モデル性能プロット
+    performance_data = []
+    for mode_key, perf in analyzer.model_performance.items():
+        diff_id = int(mode_key.split("_")[1])
+        lang_id = int(mode_key.split("_")[3])
+        performance_data.append(
+            {
+                "mode": f"難易度{diff_id} - 言語{lang_id}",
+                "R²": perf["r2"],
+                "MSE": perf["mse"],
+                "データ数": perf["data_size"],
+            }
         )
 
-        logger.info(f"ユーザー選択更新: {selected_user}")
-        return user_stats_display, selected_user
+    performance_df = pd.DataFrame(performance_data)
+    performance_fig = px.bar(
+        performance_df,
+        x="mode",
+        y="R²",
+        title="モデル性能 (R²スコア)",
+        labels={"mode": "モード", "R²": "R²スコア"},
+    )
 
-    except Exception as e:
-        logger.error(f"ユーザー表示更新エラー: {e}")
-        error_div = html.Div(
-            f"エラー: {str(e)}",
-            style={"color": "#ff6b6b", "textAlign": "center", "padding": "20px"},
+    # ユーザー比較プロット
+    user_comparison_data = (
+        analyzer.merged_data[
+            (analyzer.merged_data["diff_id"] == selected_difficulty)
+            & (analyzer.merged_data["lang_id"] == selected_language)
+        ]
+        .groupby("username")
+        .agg(
+            {
+                "score": ["mean", "std", "count"],
+                "accuracy": "mean",
+                "total_misses": "mean",
+            }
         )
-        return error_div, selected_user
+        .round(2)
+    )
 
+    user_comparison_data.columns = [
+        "avg_score",
+        "std_score",
+        "count",
+        "avg_accuracy",
+        "avg_misses",
+    ]
+    user_comparison_data = user_comparison_data.reset_index()
 
-# CSSスタイルを適用
-app.index_string = f"""
-<!DOCTYPE html>
-<html>
-    <head>
-        {{%metas%}}
-        <title>{{%title%}}</title>
-        {{%favicon%}}
-        {{%css%}}
-        <style>
-            {get_css_styles()}
-        </style>
-    </head>
-    <body>
-        {{%app_entry%}}
-        <footer>
-            {{%config%}}
-            {{%scripts%}}
-            {{%renderer%}}
-        </footer>
-    </body>
-</html>
-"""
+    user_comparison_fig = px.bar(
+        user_comparison_data,
+        x="username",
+        y="avg_score",
+        error_y="std_score",
+        title=f"ユーザー別平均スコア比較 (難易度{selected_difficulty} - 言語{selected_language})",
+        labels={"username": "ユーザー名", "avg_score": "平均スコア"},
+    )
+
+    return prediction_text, correlation_fig, performance_fig, user_comparison_fig
+
 
 if __name__ == "__main__":
-    app.run_server(
-        debug=DASHBOARD_CONFIG["debug"],
-        host=DASHBOARD_CONFIG["host"],
-        port=DASHBOARD_CONFIG["port"],
-    )
+    app.run_server(debug=True, host="0.0.0.0", port=8050)
