@@ -710,13 +710,13 @@ app.layout = html.Div(
                 "padding": "0 10px",
             },
         ),
-        # グローバル統計カード（4x2グリッド）
+        # グローバル統計カード（4x1グリッド）
         html.Div(
             id="global-stats-grid",
             style={
                 "display": "grid",
                 "gridTemplateColumns": "1fr 1fr 1fr 1fr",
-                "gridTemplateRows": "1fr 1fr",
+                "gridTemplateRows": "1fr",
                 "gap": "15px",
                 "marginBottom": "20px",
             },
@@ -836,7 +836,7 @@ def update_global_stats(n: int) -> Tuple[List[html.Div], str]:
                 "color": "#ff6b6b",
             },
         )
-        return [error_card] * 8, "エラーが発生しました"
+        return [error_card] * 4, "エラーが発生しました"
 
 
 def _create_global_stats_cards(
@@ -844,67 +844,25 @@ def _create_global_stats_cards(
 ) -> List[html.Div]:
     """グローバル統計カードを作成"""
     execution_time_str = f"{analysis_data['execution_time']:.2f}秒"
-    mae_diff_str = f"{metrics['mae_diff']:+.1f}"
 
     return [
-        # 1列目
+        # RMSE
         create_stats_card(
             "RMSE", f"{metrics['test_rmse']:.1f}", "予測誤差の標準偏差", "#2E8B57"
         ),
-        create_stats_card(
-            "学習データ", str(data_info["training_samples"]), "サンプル数", "#4ecdc4"
-        ),
-        create_stats_card(
-            "特徴量数", str(data_info["feature_count"]), "入力変数", "#9370DB"
-        ),
-        create_stats_card("実行時間", execution_time_str, "処理時間", "#ff9ff3"),
-        # 2列目
+        # MAE
         create_stats_card(
             "MAE",
             f"{metrics['test_mae']:.1f}",
-            f"平均絶対誤差 (目標差: {mae_diff_str})",
+            "平均絶対誤差",
             "#4169E1",
         ),
+        # 特徴量数
         create_stats_card(
-            "テストデータ", str(data_info["test_samples"]), "サンプル数", "#ffa500"
+            "特徴量数", str(data_info["feature_count"]), "入力変数", "#9370DB"
         ),
-        create_stats_card(
-            "総サンプル数",
-            f"{data_info['total_samples']:,}",
-            "データポイント",
-            "#FF6347",
-        ),
-        html.Div(
-            [
-                html.H3(
-                    "目標精度",
-                    style={
-                        "color": "#ffffff",
-                        "fontSize": "14px",
-                        "margin": "0 0 5px 0",
-                    },
-                ),
-                html.H2(
-                    "200.0",
-                    style={"color": "#ff6b6b", "fontSize": "24px", "margin": "0"},
-                ),
-                html.P(
-                    f"MAE目標値 ({metrics['achievement_status']})",
-                    style={
-                        "color": "#ff6b6b" if metrics["mae_diff"] > 0 else "#4ecdc4",
-                        "fontSize": "12px",
-                        "margin": "5px 0 0 0",
-                    },
-                ),
-            ],
-            style={
-                "backgroundColor": "#2d2d2d",
-                "border": "1px solid #444",
-                "borderRadius": "8px",
-                "padding": "15px",
-                "textAlign": "center",
-            },
-        ),
+        # 実行時間
+        create_stats_card("実行時間", execution_time_str, "処理時間", "#ff9ff3"),
     ]
 
 
