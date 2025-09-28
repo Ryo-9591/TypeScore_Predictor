@@ -37,10 +37,18 @@ def setup_logging():
     logs_dir = PROJECT_ROOT / "logs"
     logs_dir.mkdir(exist_ok=True)
 
+    # 現在の日付を取得（日本時間）
+    jst = pytz.timezone("Asia/Tokyo")
+    today = datetime.now(jst).strftime("%Y-%m-%d")
+
+    # 日付付きログファイル名を生成
+    app_log_file = PROJECT_ROOT / "logs" / f"app_{today}.log"
+    prediction_log_file = PROJECT_ROOT / "logs" / f"prediction_report_{today}.log"
+
     # 基本ログ設定
     # 日次ローテーションファイルハンドラー
     file_handler = logging.handlers.TimedRotatingFileHandler(
-        LOG_CONFIG["file"],
+        app_log_file,
         when="midnight",
         interval=1,
         backupCount=30,  # 30日分保持
@@ -66,7 +74,7 @@ def setup_logging():
 
         # 日次ローテーションファイルハンドラーの設定
         report_handler = logging.handlers.TimedRotatingFileHandler(
-            PREDICTION_REPORT_CONFIG["file"],
+            prediction_log_file,
             when="midnight",
             interval=1,
             backupCount=30,  # 30日分保持
@@ -84,8 +92,8 @@ def setup_logging():
     root_logger.setLevel(getattr(logging, LOG_CONFIG["level"]))
 
     print(f"ログ設定が完了しました。")
-    print(f"アプリケーションログ: {LOG_CONFIG['file']}")
-    print(f"予測精度レポートログ: {PREDICTION_REPORT_CONFIG['file']}")
+    print(f"アプリケーションログ: {app_log_file}")
+    print(f"予測精度レポートログ: {prediction_log_file}")
 
 
 def get_logger(name: str) -> logging.Logger:
