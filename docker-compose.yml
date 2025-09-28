@@ -1,18 +1,4 @@
 services:
-  api:
-    build: .
-    container_name: typescore-api
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
-      - ./output:/app/output
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: python src/api.py
-    networks:
-      - typescore-network
-
   dashboard:
     build: .
     container_name: typescore-dashboard
@@ -20,12 +6,10 @@ services:
       - "8050:8050"
     volumes:
       - ./data:/app/data
-      - ./output:/app/output
+      - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
-    command: python src/dashboard.py
-    depends_on:
-      - api
+    command: python app/main.py
     networks:
       - typescore-network
 
