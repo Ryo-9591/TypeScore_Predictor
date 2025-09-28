@@ -15,12 +15,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションコードをコピー
-COPY src/ ./src/
-COPY config/ ./config/
+COPY app/ ./app/
 COPY data/ ./data/
 
 # データディレクトリの権限設定
 RUN chmod -R 755 /app/data
 
 # デフォルトコマンド
-CMD ["python", "src/main.py"]
+CMD ["python", "app/main.py"]
