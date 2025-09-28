@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-import plotly.graph_objects as go
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
 from app.utils.common import get_logger

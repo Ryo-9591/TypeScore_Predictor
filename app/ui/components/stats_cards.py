@@ -226,7 +226,7 @@ class StatsCard:
                                 "padding": "8px",
                                 "backgroundColor": "#3d3d3d",
                                 "borderRadius": "5px",
-                                "margin": "3px",
+                                "margin": "5px",
                                 "flex": "1",
                                 "minWidth": "100px",
                             },
@@ -245,7 +245,7 @@ class StatsCard:
                 "flexDirection": "column",
                 "width": "100%",
                 "marginBottom": "10px",
-                "minHeight": "90px",
+                "minHeight": "120px",
             },
         )
 
