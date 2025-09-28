@@ -1,91 +1,69 @@
-"""
-データ処理モジュール
-生データの読み込み、クリーニング、前処理を行う
-"""
-
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any
-import logging
 
-logger = logging.getLogger(__name__)
+from app.utils.common import get_logger
+
+logger = get_logger(__name__)
 
 
 class DataProcessor:
     """データ処理のメインクラス"""
 
     def __init__(self, data_dir: Path = None):
-        """
-        データプロセッサーの初期化
-
-        Args:
-            data_dir: データディレクトリのパス
-        """
+        """データプロセッサーの初期化"""
         self.data_dir = data_dir or Path(__file__).parent.parent.parent / "data"
         self._cached_data = None
 
     def load_raw_data(self) -> Dict[str, pd.DataFrame]:
-        """
-        生データを読み込む
-
-        Returns:
-            データフレームの辞書
-        """
+        """生データを読み込む"""
         logger.info("生データを読み込み中...")
 
         try:
             # CSVファイルを読み込み
-            user_df = pd.read_csv(self.data_dir / "m_user.csv")
-            miss_df = pd.read_csv(self.data_dir / "t_miss.csv")
-            score_df = pd.read_csv(self.data_dir / "t_score.csv")
+            files = {
+                "users": self.data_dir / "m_user.csv",
+                "misses": self.data_dir / "t_miss.csv",
+                "scores": self.data_dir / "t_score.csv",
+            }
+
+            data = {name: pd.read_csv(path) for name, path in files.items()}
 
             logger.info(
-                f"データ読み込み完了: user={len(user_df)}, miss={len(miss_df)}, score={len(score_df)}"
+                f"データ読み込み完了: {', '.join([f'{k}={len(v)}' for k, v in data.items()])}"
             )
-
-            return {"users": user_df, "misses": miss_df, "scores": score_df}
+            return data
 
         except Exception as e:
             logger.error(f"データ読み込みエラー: {e}")
             raise
 
     def clean_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-        """
-        データをクリーニングして統合
-
-        Args:
-            raw_data: 生データの辞書
-
-        Returns:
-            クリーニング済みの統合データフレーム
-        """
+        """データをクリーニングして統合"""
         logger.info("データクリーニング中...")
 
         try:
-            # データの統合
-            logger.info("データ統合開始...")
+            # データの統合とクリーニング
             df_final = self._merge_data(raw_data)
             logger.info(f"データ統合完了: {len(df_final)}行, {len(df_final.columns)}列")
 
-            # データクリーニング
-            logger.info("数値データクリーニング開始...")
-            df_final = self._clean_numeric_data(df_final)
+            # クリーニング処理を順次実行
+            cleaning_steps = [
+                ("数値データクリーニング", self._clean_numeric_data),
+                ("欠損値処理", self._handle_missing_values),
+                ("日時変換", self._convert_datetime),
+            ]
 
-            logger.info("欠損値処理開始...")
-            df_final = self._handle_missing_values(df_final)
-
-            logger.info("日時変換開始...")
-            df_final = self._convert_datetime(df_final)
+            for step_name, step_func in cleaning_steps:
+                logger.info(f"{step_name}開始...")
+                df_final = step_func(df_final)
 
             logger.info(f"データクリーニング完了: {len(df_final)}行")
             return df_final
 
         except Exception as e:
             logger.error(f"データクリーニングエラー: {e}")
-            import traceback
-
-            logger.error(f"詳細エラー: {traceback.format_exc()}")
             raise
 
     def _merge_data(self, raw_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -105,14 +83,30 @@ class DataProcessor:
             miss_totals.rename(columns={"miss_count": "total_miss"}, inplace=True)
             logger.info(f"miss_totals形状: {miss_totals.shape}")
 
-            # スコアデータとミス合計データを統合（created_atの重複を避けるため、必要なカラムのみ選択）
+            # スコアデータとミス合計データを統合
             df_merged = score_df.merge(miss_totals, on="user_id", how="left")
 
             # デバッグ: マージ後のカラムを確認
             logger.info(f"マージ後のカラム: {list(df_merged.columns)}")
 
-            # ユーザー情報を統合
-            df_final = df_merged.merge(users_df, on="user_id", how="left")
+            # ユーザー情報を統合（created_atの重複を避けるため、suffixesを使用）
+            df_final = df_merged.merge(
+                users_df, on="user_id", how="left", suffixes=("", "_user")
+            )
+
+            # created_at_xとcreated_at_yが存在する場合は、created_at_xを優先してcreated_atに統一
+            if (
+                "created_at_x" in df_final.columns
+                and "created_at_y" in df_final.columns
+            ):
+                df_final["created_at"] = df_final["created_at_x"]
+                df_final = df_final.drop(columns=["created_at_x", "created_at_y"])
+            elif "created_at_x" in df_final.columns:
+                df_final["created_at"] = df_final["created_at_x"]
+                df_final = df_final.drop(columns=["created_at_x"])
+            elif "created_at_y" in df_final.columns:
+                df_final["created_at"] = df_final["created_at_y"]
+                df_final = df_final.drop(columns=["created_at_y"])
 
             # デバッグ: 最終的なカラムを確認
             logger.info(f"最終的なカラム: {list(df_final.columns)}")
@@ -130,35 +124,33 @@ class DataProcessor:
             raise
 
     def _clean_numeric_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """数値データのクリーニング"""
+        """数値データのクリーニング（外れ値処理）"""
         numeric_columns = df.select_dtypes(include=[np.number]).columns
 
         for col in numeric_columns:
-            # 異常値の処理（外れ値の除去）
-            Q1 = df[col].quantile(0.25)
-            Q3 = df[col].quantile(0.75)
+            # IQR法による外れ値のクリッピング
+            Q1, Q3 = df[col].quantile([0.25, 0.75])
             IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-
-            # 外れ値を境界値に置換
-            df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
+            bounds = Q1 - 1.5 * IQR, Q3 + 1.5 * IQR
+            df[col] = df[col].clip(*bounds)
 
         return df
 
     def _handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """欠損値の処理"""
         # 数値列の欠損値を中央値で埋める
-        numeric_columns = df.select_dtypes(include=[np.number]).columns
-        for col in numeric_columns:
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
             if df[col].isnull().any():
-                df[col].fillna(df[col].median(), inplace=True)
+                df[col] = df[col].fillna(df[col].median())
 
         # カテゴリ列の欠損値を最頻値で埋める
-        categorical_columns = df.select_dtypes(include=["object"]).columns
-        for col in categorical_columns:
+        categorical_cols = df.select_dtypes(include=["object"]).columns
+        for col in categorical_cols:
             if df[col].isnull().any():
-                df[col].fillna(df[col].mode()[0], inplace=True)
+                df[col] = df[col].fillna(
+                    df[col].mode().iloc[0] if len(df[col].mode()) > 0 else "unknown"
+                )
 
         return df
 
@@ -168,30 +160,27 @@ class DataProcessor:
 
         for col in datetime_columns:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
+                # UTC時間を日本時間に変換してからdatetime型に変換
+                df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+
+                # UTCから日本時間（JST）に変換
+                df[col] = df[col].dt.tz_convert("Asia/Tokyo")
 
         return df
 
-    def get_processed_data(self) -> pd.DataFrame:
-        """
-        処理済みデータを取得（キャッシュ機能付き）
-
-        Returns:
-            処理済みデータフレーム
-        """
+    def processed_data(self) -> pd.DataFrame:
+        """処理済みデータを取得（キャッシュ機能付き）"""
         if self._cached_data is None:
             raw_data = self.load_raw_data()
             self._cached_data = self.clean_data(raw_data)
-
         return self._cached_data.copy()
 
-    def get_data_info(self) -> Dict[str, Any]:
-        """
-        データの基本情報を取得
+    def get_processed_data(self) -> pd.DataFrame:
+        """処理済みデータを取得（互換性のため）"""
+        return self.processed_data()
 
-        Returns:
-            データ情報の辞書
-        """
+    def get_data_info(self) -> Dict[str, Any]:
+        """データの基本情報を取得"""
         df = self.get_processed_data()
 
         return {
@@ -206,5 +195,5 @@ class DataProcessor:
                 "median": float(df["score"].median()),
             },
             "missing_values": df.isnull().sum().to_dict(),
-            "data_types": df.dtypes.to_dict(),
+            "data_types": {str(k): str(v) for k, v in df.dtypes.to_dict().items()},
         }

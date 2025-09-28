@@ -1,36 +1,11 @@
-"""
-予測サービス
-スコア予測に関するビジネスロジックを提供
-"""
-
 import numpy as np
 from typing import Dict, Any, Optional
-import logging
 from datetime import datetime
-import json
-from pathlib import Path
 
 from app.core import DataProcessor, FeatureEngineer, ModelTrainer
-from app.config import PREDICTION_REPORT_CONFIG
-from app.utils import safe_text_log
-from app.logging_config import get_logger, get_report_logger
+from app.utils.common import get_logger
 
 logger = get_logger(__name__)
-
-# 予測精度レポート用の専用ロガー
-report_logger = get_report_logger()
-report_logger.setLevel(logging.INFO)
-
-# ログファイルハンドラーの設定
-if PREDICTION_REPORT_CONFIG["enabled"]:
-    log_file = PREDICTION_REPORT_CONFIG["file"]
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    handler = logging.FileHandler(log_file, encoding="utf-8")
-    formatter = logging.Formatter(PREDICTION_REPORT_CONFIG["format"])
-    handler.setFormatter(formatter)
-    report_logger.addHandler(handler)
-    report_logger.propagate = False
 
 
 class PredictionService:
@@ -83,14 +58,10 @@ class PredictionService:
 
             logger.info(f"モデル学習完了: MAE={metrics['test_mae']:.2f}")
 
-            # 予測精度レポートの出力
-            self._log_training_report(result, metrics, evaluation)
-
             return result
 
         except Exception as e:
             logger.error(f"モデル学習エラー: {e}")
-            self._log_error_report("model_training", str(e))
             return {
                 "status": "error",
                 "error": str(e),
@@ -163,14 +134,10 @@ class PredictionService:
                 "timestamp": datetime.now().isoformat(),
             }
 
-            # 予測精度レポートの出力
-            self._log_prediction_report(user_id, feature_values, result)
-
             return result
 
         except Exception as e:
             logger.error(f"予測エラー: {e}")
-            self._log_error_report("prediction", str(e), {"user_id": user_id})
             return {
                 "status": "error",
                 "error": str(e),
@@ -265,122 +232,3 @@ class PredictionService:
 
         logger.info("モデル再学習完了")
         return result
-
-    def _log_training_report(
-        self,
-        result: Dict[str, Any],
-        metrics: Dict[str, float],
-        evaluation: Dict[str, Any],
-    ):
-        """モデル学習レポートをログに出力"""
-        if not PREDICTION_REPORT_CONFIG["enabled"]:
-            return
-
-        report_data = {
-            "event_type": "model_training",
-            "timestamp": datetime.now().isoformat(),
-            "status": result["status"],
-            "metrics": metrics,
-            "evaluation": evaluation,
-            "feature_count": result["feature_count"],
-            "training_samples": result["training_samples"],
-            "target_achieved": evaluation.get("target_achieved", False),
-            "performance_status": evaluation.get("performance_status", "不明"),
-        }
-
-        if PREDICTION_REPORT_CONFIG["include_metrics"]:
-            report_logger.info(safe_text_log(report_data, "MODEL_TRAINING_REPORT"))
-
-    def _log_prediction_report(
-        self, user_id: str, feature_values: np.ndarray, result: Dict[str, Any]
-    ):
-        """予測レポートをログに出力"""
-        if not PREDICTION_REPORT_CONFIG["enabled"]:
-            return
-
-        report_data = {
-            "event_type": "prediction",
-            "timestamp": datetime.now().isoformat(),
-            "user_id": user_id,
-            "predicted_score": result["predicted_score"],
-            "confidence": result["confidence"],
-            "model_info": result["model_info"],
-            "feature_values": feature_values.tolist(),
-            "feature_names": self._feature_names,
-        }
-
-        if PREDICTION_REPORT_CONFIG["include_prediction_details"]:
-            report_logger.info(safe_text_log(report_data, "PREDICTION_REPORT"))
-
-        if PREDICTION_REPORT_CONFIG["include_feature_importance"]:
-            importance_data = {
-                "event_type": "feature_importance",
-                "timestamp": datetime.now().isoformat(),
-                "user_id": user_id,
-                "feature_importance": result["feature_importance"],
-            }
-            report_logger.info(
-                safe_text_log(importance_data, "FEATURE_IMPORTANCE_REPORT")
-            )
-
-    def _log_error_report(
-        self, error_type: str, error_message: str, context: Dict[str, Any] = None
-    ):
-        """エラーレポートをログに出力"""
-        if not PREDICTION_REPORT_CONFIG["enabled"]:
-            return
-
-        error_data = {
-            "event_type": "error",
-            "error_type": error_type,
-            "timestamp": datetime.now().isoformat(),
-            "error_message": error_message,
-            "context": context or {},
-        }
-
-        report_logger.error(safe_text_log(error_data, "ERROR_REPORT"))
-
-    def generate_daily_report(self) -> Dict[str, Any]:
-        """日次予測精度レポートを生成"""
-        if not self._is_trained:
-            return {"status": "error", "message": "モデルが学習されていません"}
-
-        try:
-            # モデル情報の取得
-            model_info = self.get_model_info()
-
-            # データ情報の取得
-            data_info = self.data_processor.get_data_info()
-
-            # 特徴量重要度の取得
-            feature_importance = self.model_trainer.get_feature_importance()
-
-            daily_report = {
-                "report_date": datetime.now().strftime("%Y-%m-%d"),
-                "timestamp": datetime.now().isoformat(),
-                "model_performance": {
-                    "mae": float(model_info["metrics"]["test_mae"]),
-                    "rmse": float(model_info["metrics"]["test_rmse"]),
-                    "target_achieved": bool(
-                        model_info["metrics"]["test_mae"]
-                        <= PREDICTION_REPORT_CONFIG.get("target_mae", 200.0)
-                    ),
-                },
-                "data_summary": {
-                    "total_samples": int(data_info["total_samples"]),
-                    "unique_users": int(data_info["unique_users"]),
-                    "feature_count": int(data_info["feature_count"]),
-                },
-                "feature_importance": feature_importance,
-                "model_config": self.model_trainer.config,
-            }
-
-            # レポートをログに出力
-            report_logger.info(safe_text_log(daily_report, "DAILY_REPORT"))
-
-            return {"status": "success", "report": daily_report}
-
-        except Exception as e:
-            logger.error(f"日次レポート生成エラー: {e}")
-            self._log_error_report("daily_report_generation", str(e))
-            return {"status": "error", "error": str(e)}

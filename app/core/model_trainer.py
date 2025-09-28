@@ -1,8 +1,3 @@
-"""
-モデル学習モジュール
-XGBoostモデルの学習、評価、予測を行う
-"""
-
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -10,18 +5,11 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import LabelEncoder
 from typing import Tuple, Dict, Any
-import logging
-import plotly.graph_objects as go
-import json
 from datetime import datetime
 
-from app.utils import safe_text_log
-from app.logging_config import get_logger, get_report_logger
+from app.utils.common import get_logger
 
 logger = get_logger(__name__)
-
-# 予測精度レポート用の専用ロガー
-report_logger = get_report_logger()
 
 
 class ModelTrainer:
@@ -97,14 +85,10 @@ class ModelTrainer:
 
             logger.info(f"モデル学習完了 - テストMAE: {metrics['test_mae']:.2f}")
 
-            # 精度分析レポートの出力
-            self._log_accuracy_analysis(X_train, y_train, X_test, y_test, metrics)
-
             return model, metrics
 
         except Exception as e:
             logger.error(f"モデル学習エラー: {e}")
-            self._log_training_error(str(e))
             raise
 
     def _encode_categorical_features(
@@ -262,192 +246,3 @@ class ModelTrainer:
             raise ValueError("モデルが学習されていません")
 
         return dict(zip(self.feature_names, self.model.feature_importances_))
-
-    def _log_accuracy_analysis(
-        self,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
-        X_test: pd.DataFrame,
-        y_test: pd.Series,
-        metrics: Dict[str, float],
-    ):
-        """精度分析レポートをログに出力"""
-        try:
-            # 基本統計情報
-            train_stats = {
-                "mean": float(y_train.mean()),
-                "std": float(y_train.std()),
-                "min": float(y_train.min()),
-                "max": float(y_train.max()),
-                "median": float(y_train.median()),
-            }
-
-            test_stats = {
-                "mean": float(y_test.mean()),
-                "std": float(y_test.std()),
-                "min": float(y_test.min()),
-                "max": float(y_test.max()),
-                "median": float(y_test.median()),
-            }
-
-            # 特徴量統計
-            feature_stats = {}
-            for feature in self.feature_names:
-                if feature in X_train.columns:
-                    feature_stats[feature] = {
-                        "train_mean": float(X_train[feature].mean()),
-                        "train_std": float(X_train[feature].std()),
-                        "test_mean": float(X_test[feature].mean()),
-                        "test_std": float(X_test[feature].std()),
-                    }
-
-            # 精度分析レポート
-            accuracy_report = {
-                "event_type": "accuracy_analysis",
-                "timestamp": datetime.now().isoformat(),
-                "model_config": self.config,
-                "data_summary": {
-                    "train_samples": len(X_train),
-                    "test_samples": len(X_test),
-                    "feature_count": len(self.feature_names),
-                    "features": self.feature_names,
-                },
-                "target_statistics": {"train": train_stats, "test": test_stats},
-                "feature_statistics": feature_stats,
-                "performance_metrics": metrics,
-                "accuracy_assessment": {
-                    "mae_target_achieved": bool(
-                        metrics["test_mae"] <= self.config["target_mae"]
-                    ),
-                    "target_mae": self.config["target_mae"],
-                    "performance_level": self._assess_performance_level(
-                        metrics["test_mae"]
-                    ),
-                    "improvement_potential": self._assess_improvement_potential(
-                        metrics
-                    ),
-                },
-            }
-
-            report_logger.info(
-                safe_text_log(accuracy_report, "ACCURACY_ANALYSIS_REPORT")
-            )
-
-        except Exception as e:
-            logger.error(f"精度分析レポート出力エラー: {e}")
-
-    def _log_training_error(self, error_message: str):
-        """学習エラーレポートをログに出力"""
-        error_report = {
-            "event_type": "training_error",
-            "timestamp": datetime.now().isoformat(),
-            "error_message": error_message,
-            "model_config": self.config,
-            "training_samples": self.training_samples,
-            "feature_count": len(self.feature_names),
-        }
-
-        report_logger.error(safe_text_log(error_report, "TRAINING_ERROR_REPORT"))
-
-    def _assess_performance_level(self, mae: float) -> str:
-        """パフォーマンスレベルを評価"""
-        if mae <= 100:
-            return "優秀"
-        elif mae <= 200:
-            return "良好"
-        elif mae <= 400:
-            return "普通"
-        else:
-            return "改善必要"
-
-    def _assess_improvement_potential(
-        self, metrics: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """改善可能性を評価"""
-        mae = metrics["test_mae"]
-        rmse = metrics["test_rmse"]
-
-        improvement_potential = {
-            "high": mae > 300 or rmse > 500,
-            "medium": 200 < mae <= 300 or 300 < rmse <= 500,
-            "low": mae <= 200 and rmse <= 300,
-            "recommendations": [],
-        }
-
-        # 推奨事項の生成
-        if mae > 300:
-            improvement_potential["recommendations"].append(
-                "特徴量エンジニアリングの見直し"
-            )
-        if rmse > 500:
-            improvement_potential["recommendations"].append("モデルパラメータの調整")
-        if len(self.feature_names) < 5:
-            improvement_potential["recommendations"].append("特徴量の追加")
-
-        return improvement_potential
-
-    def create_prediction_plot(
-        self, y_test: pd.Series, y_pred: np.ndarray
-    ) -> go.Figure:
-        """
-        予測結果の散布図を作成
-
-        Args:
-            y_test: 実測値
-            y_pred: 予測値
-
-        Returns:
-            PlotlyのFigureオブジェクト
-        """
-        logger.info("予測結果の散布図を作成中...")
-
-        fig = go.Figure()
-
-        # 散布図の追加
-        fig.add_trace(
-            go.Scatter(
-                x=y_test,
-                y=y_pred,
-                mode="markers",
-                marker=dict(
-                    size=8,
-                    opacity=0.6,
-                    color="#007bff",
-                    line=dict(color="#ffffff", width=1),
-                ),
-                name="予測値 vs 実測値",
-            )
-        )
-
-        # 理想的な予測線（y=x）を追加
-        min_val = min(y_test.min(), y_pred.min())
-        max_val = max(y_test.max(), y_pred.max())
-        fig.add_trace(
-            go.Scatter(
-                x=[min_val, max_val],
-                y=[min_val, max_val],
-                mode="lines",
-                line=dict(color="#dc3545", width=3, dash="dash"),
-                name="理想的な予測線",
-            )
-        )
-
-        # ダークテーマを適用
-        title_text = f"予測スコア vs 実測スコア<br>RMSE: {self.metrics['test_rmse']:.2f}, MAE: {self.metrics['test_mae']:.2f}"
-        fig.update_layout(
-            title=title_text,
-            xaxis_title="実測スコア",
-            yaxis_title="予測スコア",
-            width=800,
-            height=600,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff", size=12),
-            title_font=dict(color="#ffffff", size=16),
-            xaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            yaxis=dict(gridcolor="#444", linecolor="#666", tickcolor="#666"),
-            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#ffffff")),
-        )
-
-        logger.info("予測散布図を作成しました")
-        return fig

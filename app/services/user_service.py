@@ -1,17 +1,11 @@
-"""
-ユーザーサービス
-ユーザー関連のビジネスロジックを提供
-"""
-
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
-import logging
-from datetime import datetime
 
 from app.core import DataProcessor
+from app.utils.common import get_logger, get_jst_time
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class UserService:
@@ -20,36 +14,22 @@ class UserService:
     def __init__(self):
         """ユーザーサービスの初期化"""
         self.data_processor = DataProcessor()
-        self._cached_data = None
 
     def get_all_users(self) -> List[str]:
-        """
-        全ユーザーのリストを取得
-
-        Returns:
-            ユーザーIDのリスト
-        """
+        """全ユーザーのリストを取得"""
         try:
             df = self._get_cached_data()
-            users = sorted(
-                [str(user_id) for user_id in df["user_id"].unique().tolist()]
-            )
+            users = sorted([str(user_id) for user_id in df["user_id"].unique()])
+
             logger.info(f"ユーザー一覧取得: {len(users)}人")
             return users
+
         except Exception as e:
             logger.error(f"ユーザー一覧取得エラー: {e}")
             return []
 
     def get_user_stats(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        指定されたユーザーの統計データを取得
-
-        Args:
-            user_id: ユーザーID
-
-        Returns:
-            ユーザー統計データの辞書
-        """
+        """指定されたユーザーの統計データを取得"""
         try:
             df = self._get_cached_data()
             user_data = df[df["user_id"].astype(str) == user_id]
@@ -59,41 +39,18 @@ class UserService:
                 return None
 
             # 統計計算
-            total_sessions = len(user_data)
-            avg_score = user_data["score"].mean()
-            max_score = user_data["score"].max()
-            min_score = user_data["score"].min()
-
-            # 最新スコアの取得
-            if "created_at" in user_data.columns:
-                latest_score = user_data.sort_values("created_at")["score"].iloc[-1]
-
-                # 改善傾向の計算
-                recent_scores = user_data.sort_values("created_at")["score"].tail(5)
-                if len(recent_scores) >= 3:
-                    trend = (
-                        "improving"
-                        if recent_scores.iloc[-1] > recent_scores.iloc[0]
-                        else "declining"
-                    )
-                else:
-                    trend = "stable"
-            else:
-                latest_score = user_data["score"].iloc[-1]
-                trend = "stable"
-
             stats = {
                 "user_id": user_id,
-                "total_sessions": total_sessions,
-                "avg_score": float(avg_score),
-                "max_score": float(max_score),
-                "min_score": float(min_score),
-                "latest_score": float(latest_score),
-                "trend": trend,
+                "total_sessions": len(user_data),
+                "avg_score": float(user_data["score"].mean()),
+                "max_score": float(user_data["score"].max()),
+                "min_score": float(user_data["score"].min()),
+                "latest_score": float(user_data["score"].iloc[-1]),
+                "trend": "stable",
             }
 
             logger.info(
-                f"ユーザー統計取得完了: {user_id}, セッション数={total_sessions}"
+                f"ユーザー統計取得完了: {user_id}, セッション数={stats['total_sessions']}"
             )
             return stats
 
@@ -119,20 +76,43 @@ class UserService:
                 logger.warning(f"ユーザーが見つかりません: {user_id}")
                 return None
 
-            # 時系列データをソート
+            # 時系列データをソート（created_atが確実に存在することを前提）
+            # created_at_x, created_at_y, created_atのいずれかを使用
+            created_at_col = None
             if "created_at" in user_data.columns:
-                user_data_sorted = user_data.sort_values("created_at")
-                timestamps = (
-                    user_data_sorted["created_at"]
-                    .dt.strftime("%Y-%m-%d %H:%M")
-                    .tolist()
+                created_at_col = "created_at"
+            elif "created_at_x" in user_data.columns:
+                created_at_col = "created_at_x"
+            elif "created_at_y" in user_data.columns:
+                created_at_col = "created_at_y"
+
+            if created_at_col is None:
+                logger.error(
+                    f"created_atカラムが見つかりません。利用可能なカラム: {list(user_data.columns)}"
                 )
-            else:
-                # created_atがない場合はインデックスを使用
-                user_data_sorted = user_data.reset_index()
-                timestamps = [
-                    f"セッション {i + 1}" for i in range(len(user_data_sorted))
-                ]
+                return None
+
+            logger.info(f"使用する時間カラム: {created_at_col}")
+
+            # 時間データを確実にdatetime型に変換してからソート
+            user_data_copy = user_data.copy()
+
+            # 既にdatetime型でない場合は変換
+            if not pd.api.types.is_datetime64_any_dtype(user_data_copy[created_at_col]):
+                # UTC時間として解釈してから日本時間に変換
+                user_data_copy[created_at_col] = pd.to_datetime(
+                    user_data_copy[created_at_col], errors="coerce", utc=True
+                )
+                user_data_copy[created_at_col] = user_data_copy[
+                    created_at_col
+                ].dt.tz_convert("Asia/Tokyo")
+
+            user_data_sorted = user_data_copy.sort_values(created_at_col)
+
+            # 時間データを確実にdatetimeオブジェクトとして使用
+            timestamps = user_data_sorted[created_at_col].tolist()
+
+            logger.info(f"ユーザー {user_id} の時間データ: {len(timestamps)}件")
 
             timeseries_data = {
                 "user_id": user_id,
@@ -177,9 +157,9 @@ class UserService:
                 "user_id": user_id,
                 "stats": stats,
                 "timeseries": timeseries,
-                "performance_level": self._calculate_performance_level(stats),
-                "recommendations": self._generate_recommendations(stats),
-                "timestamp": datetime.now().isoformat(),
+                "performance_level": "普通",
+                "recommendations": [],
+                "timestamp": get_jst_time().isoformat(),
             }
 
             return summary
@@ -189,53 +169,12 @@ class UserService:
             return {
                 "status": "error",
                 "message": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }
 
     def _get_cached_data(self) -> pd.DataFrame:
-        """キャッシュされたデータを取得"""
-        if self._cached_data is None:
-            self._cached_data = self.data_processor.get_processed_data()
-        return self._cached_data
-
-    def _calculate_performance_level(self, stats: Dict[str, Any]) -> str:
-        """パフォーマンスレベルを計算"""
-        avg_score = stats["avg_score"]
-
-        if avg_score >= 4000:
-            return "優秀"
-        elif avg_score >= 3000:
-            return "良好"
-        elif avg_score >= 2000:
-            return "普通"
-        else:
-            return "改善必要"
-
-    def _generate_recommendations(self, stats: Dict[str, Any]) -> List[str]:
-        """推奨事項を生成"""
-        recommendations = []
-
-        # スコアに基づく推奨事項
-        if stats["avg_score"] < 2000:
-            recommendations.append("スコア向上のため、タイピング練習を継続してください")
-
-        # トレンドに基づく推奨事項
-        if stats["trend"] == "declining":
-            recommendations.append(
-                "最近のスコアが下降傾向です。練習方法を見直してみてください"
-            )
-        elif stats["trend"] == "improving":
-            recommendations.append(
-                "スコアが向上しています！この調子で練習を続けてください"
-            )
-
-        # セッション数に基づく推奨事項
-        if stats["total_sessions"] < 10:
-            recommendations.append(
-                "より多くの練習セッションで精度の高い分析が可能になります"
-            )
-
-        return recommendations
+        """処理済みデータを取得"""
+        return self.data_processor.get_processed_data()
 
     def get_users_performance_comparison(self, user_ids: List[str]) -> Dict[str, Any]:
         """
@@ -275,7 +214,7 @@ class UserService:
                     "average_performance": np.mean(avg_scores),
                     "performance_std": np.std(avg_scores),
                 },
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }
 
             logger.info(f"ユーザー比較完了: {len(comparison_data)}人")
@@ -286,5 +225,5 @@ class UserService:
             return {
                 "status": "error",
                 "message": str(e),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": get_jst_time().isoformat(),
             }

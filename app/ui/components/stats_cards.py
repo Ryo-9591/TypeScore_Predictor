@@ -1,8 +1,3 @@
-"""
-統計カードコンポーネント
-ダッシュボード用の統計表示カードを作成
-"""
-
 from dash import html
 from typing import Dict, Any, List
 import logging
@@ -15,7 +10,11 @@ class StatsCard:
 
     @staticmethod
     def create(
-        title: str, value: str, description: str, color: str = "#007bff"
+        title: str,
+        value: str,
+        description: str,
+        color: str = "#007bff",
+        size: str = "normal",  # "small", "normal", "large"
     ) -> html.Div:
         """
         統計カードを作成
@@ -25,17 +24,42 @@ class StatsCard:
             value: 表示する値
             description: 説明文
             color: 値の色
+            size: カードサイズ ("small", "normal", "large")
 
         Returns:
             DashのDivコンポーネント
         """
+        # サイズに応じたスタイル設定
+        size_config = {
+            "small": {
+                "padding": "15px",
+                "titleFontSize": "12px",
+                "valueFontSize": "22px",
+                "descFontSize": "11px",
+            },
+            "normal": {
+                "padding": "20px",
+                "titleFontSize": "14px",
+                "valueFontSize": "28px",
+                "descFontSize": "12px",
+            },
+            "large": {
+                "padding": "25px",
+                "titleFontSize": "16px",
+                "valueFontSize": "32px",
+                "descFontSize": "13px",
+            },
+        }
+
+        config = size_config.get(size, size_config["normal"])
+
         return html.Div(
             [
                 html.H3(
                     title,
                     style={
                         "color": "#ffffff",
-                        "fontSize": "14px",
+                        "fontSize": config["titleFontSize"],
                         "margin": "0 0 5px 0",
                         "fontWeight": "500",
                         "textTransform": "uppercase",
@@ -46,7 +70,7 @@ class StatsCard:
                     value,
                     style={
                         "color": color,
-                        "fontSize": "28px",
+                        "fontSize": config["valueFontSize"],
                         "margin": "0 0 8px 0",
                         "fontWeight": "700",
                     },
@@ -55,7 +79,7 @@ class StatsCard:
                     description,
                     style={
                         "color": "#cccccc",
-                        "fontSize": "12px",
+                        "fontSize": config["descFontSize"],
                         "margin": "0",
                         "opacity": "0.8",
                     },
@@ -66,10 +90,10 @@ class StatsCard:
                 "backgroundColor": "#2d2d2d",
                 "border": "1px solid #444",
                 "borderRadius": "12px",
-                "padding": "20px",
+                "padding": config["padding"],
                 "textAlign": "center",
                 "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)",
-                "transition": "transform 0.2s ease, box-shadow 0.2s ease",
+                # ホバー効果とトランジションを削除
             },
         )
 
@@ -99,6 +123,13 @@ class StatsCard:
                 ]
             )
 
+        # 予想スコアと実測スコアの差を計算
+        predicted_score = user_stats["avg_score"]  # 平均スコアを予想スコアとして使用
+        actual_score = user_stats["latest_score"]
+        score_diff = actual_score - predicted_score
+        diff_sign = "+" if score_diff >= 0 else ""
+        diff_color = "#4CAF50" if score_diff >= 0 else "#FF5722"
+
         return html.Div(
             [
                 html.Div(
@@ -106,7 +137,7 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "総セッション数",
+                                    "セッション数",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
@@ -134,20 +165,33 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "平均スコア",
+                                    "予想スコア",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
                                         "display": "block",
                                     },
                                 ),
-                                html.Span(
-                                    f"{user_stats['avg_score']:.0f}",
-                                    style={
-                                        "color": "#ffffff",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
+                                html.Div(
+                                    [
+                                        html.Span(
+                                            f"{predicted_score:.0f}",
+                                            style={
+                                                "color": "#ffffff",
+                                                "fontSize": "16px",
+                                                "fontWeight": "bold",
+                                            },
+                                        ),
+                                        html.Span(
+                                            f" {diff_sign}{score_diff:.0f}",
+                                            style={
+                                                "color": diff_color,
+                                                "fontSize": "12px",
+                                                "fontWeight": "bold",
+                                            },
+                                        ),
+                                    ],
+                                    style={"display": "flex", "alignItems": "baseline"},
                                 ),
                             ],
                             style={
@@ -162,7 +206,7 @@ class StatsCard:
                         html.Div(
                             [
                                 html.Span(
-                                    "最高スコア",
+                                    "実測スコア",
                                     style={
                                         "color": "#888888",
                                         "fontSize": "11px",
@@ -170,72 +214,7 @@ class StatsCard:
                                     },
                                 ),
                                 html.Span(
-                                    f"{user_stats['max_score']:.0f}",
-                                    style={
-                                        "color": "#4CAF50",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                    ],
-                    style={
-                        "display": "flex",
-                        "flexWrap": "wrap",
-                        "marginBottom": "10px",
-                    },
-                ),
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Span(
-                                    "最低スコア",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['min_score']:.0f}",
-                                    style={
-                                        "color": "#FF9800",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                        html.Div(
-                            [
-                                html.Span(
-                                    "最新スコア",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['latest_score']:.0f}",
+                                    f"{actual_score:.0f}",
                                     style={
                                         "color": "#2196F3",
                                         "fontSize": "16px",
@@ -247,39 +226,7 @@ class StatsCard:
                                 "padding": "8px",
                                 "backgroundColor": "#3d3d3d",
                                 "borderRadius": "5px",
-                                "margin": "3px",
-                                "flex": "1",
-                                "minWidth": "100px",
-                            },
-                        ),
-                        html.Div(
-                            [
-                                html.Span(
-                                    "改善傾向",
-                                    style={
-                                        "color": "#888888",
-                                        "fontSize": "11px",
-                                        "display": "block",
-                                    },
-                                ),
-                                html.Span(
-                                    f"{user_stats['trend']}",
-                                    style={
-                                        "color": "#4CAF50"
-                                        if user_stats["trend"] == "improving"
-                                        else "#FF5722"
-                                        if user_stats["trend"] == "declining"
-                                        else "#FFC107",
-                                        "fontSize": "16px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ],
-                            style={
-                                "padding": "8px",
-                                "backgroundColor": "#3d3d3d",
-                                "borderRadius": "5px",
-                                "margin": "3px",
+                                "margin": "5px",
                                 "flex": "1",
                                 "minWidth": "100px",
                             },
@@ -292,11 +239,13 @@ class StatsCard:
                     },
                 ),
             ],
+            className="user-stats-card",
             style={
                 "display": "flex",
                 "flexDirection": "column",
                 "width": "100%",
-                "marginBottom": "15px",
+                "marginBottom": "10px",
+                "minHeight": "120px",
             },
         )
 

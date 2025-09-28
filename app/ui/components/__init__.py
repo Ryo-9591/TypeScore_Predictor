@@ -5,7 +5,7 @@ UIコンポーネントモジュール
 
 from .stats_cards import StatsCard, StatsGrid
 from .charts import PredictionChart, FeatureImportanceChart, UserPerformanceChart
-from .forms import UserSelector, PredictionForm
+from .forms import UserSelector
 
 __all__ = [
     "StatsCard",
@@ -14,5 +14,4 @@ __all__ = [
     "FeatureImportanceChart",
     "UserPerformanceChart",
     "UserSelector",
-    "PredictionForm",
 ]

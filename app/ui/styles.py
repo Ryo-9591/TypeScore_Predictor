@@ -1,8 +1,3 @@
-"""
-スタイル設定モジュール
-UIコンポーネント用のスタイル設定を提供
-"""
-
 # ダークテーマの共通スタイル設定
 DARK_THEME = {
     "paper_bgcolor": "rgba(0,0,0,0)",
@@ -68,33 +63,58 @@ LAYOUT_STYLES = {
     "main_container": {
         "backgroundColor": "#1a1a1a",
         "height": "100vh",
-        "padding": "15px",
+        "padding": "10px",
         "overflow": "hidden",
+        "display": "flex",
+        "flexDirection": "column",
+        "boxSizing": "border-box",
     },
     "header": {
         "display": "flex",
         "justifyContent": "space-between",
         "alignItems": "center",
-        "marginBottom": "20px",
-        "padding": "0 10px",
+        "marginBottom": "15px",
+        "padding": "0 5px",
+        "flex": "0 0 auto",
     },
-    "stats_grid": {
+    "stats_container": {
         "display": "grid",
         "gridTemplateColumns": "1fr 1fr 1fr 1fr",
         "gridTemplateRows": "1fr",
-        "gap": "15px",
-        "marginBottom": "20px",
+        "gap": "10px",
+        "marginBottom": "15px",
+        "flex": "0 0 auto",
     },
-    "panel_container": {
-        "display": "flex",
-        "gap": "15px",
-        "height": "calc(100vh - 400px)",
-    },
-    "panel": {
+    "user_container": {
         "backgroundColor": "#2d2d2d",
         "borderRadius": "8px",
-        "padding": "15px",
+        "padding": "8px",
         "flex": "1",
+        "minWidth": "300px",
+        "overflow": "hidden",
+        "display": "flex",
+        "flexDirection": "column",
+    },
+    "analysis_container": {
+        "flex": "1",
+        "display": "flex",
+        "flexDirection": "column",
+        "gap": "10px",
+        "minWidth": "0",
+    },
+    "analysis_panel": {
+        "backgroundColor": "#2d2d2d",
+        "borderRadius": "8px",
+        "padding": "12px",
+        "flex": "2",
+        "overflow": "hidden",
+        "boxSizing": "border-box",
+    },
+    "bottom_container": {
+        "display": "flex",
+        "gap": "10px",
+        "flex": "1",
+        "minHeight": "0",
     },
 }
 
@@ -104,14 +124,9 @@ COMPONENT_STYLES = {
         "backgroundColor": "#2d2d2d",
         "border": "1px solid #444",
         "borderRadius": "12px",
-        "padding": "20px",
+        "padding": "15px",
         "textAlign": "center",
         "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.3)",
-        "transition": "transform 0.2s ease, box-shadow 0.2s ease",
-    },
-    "stats_card_hover": {
-        "transform": "translateY(-2px)",
-        "boxShadow": "0 6px 12px rgba(0, 0, 0, 0.4)",
     },
     "dropdown": {
         "backgroundColor": "#3d3d3d",
@@ -134,12 +149,9 @@ COMPONENT_STYLES = {
         "padding": "10px",
         "cursor": "pointer",
     },
-    "button_hover": {
-        "backgroundColor": "#0056b3",
-    },
 }
 
-# CSSスタイル文字列
+# CSSスタイル文字列（最適化版）
 CSS_STYLES = """
 body {
     background-color: #0f1419;
@@ -150,24 +162,56 @@ body {
     overflow-x: hidden;
 }
 
-/* グローバル統計カードのスタイル */
-.stats-card {
+/* 共通コンポーネントスタイル */
+.stats-card, .panel {
     background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
     border: 1px solid #444;
     border-radius: 12px;
-    padding: 20px;
-    text-align: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.stats-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+.stats-card {
+    padding: 15px;
+    text-align: center;
 }
 
+.user-stats-card {
+    padding: 12px;
+    text-align: center;
+}
+
+.panel {
+    padding: 12px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* チャート関連スタイル */
+.chart-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-title {
+    color: #ffffff;
+    margin-bottom: 10px;
+    font-size: 16px;
+    text-align: center;
+}
+
+.chart-graph {
+    height: calc(100% - 50px);
+    min-height: 250px;
+    width: 100%;
+    flex: 1;
+    overflow: visible;
+}
+
+/* テキストスタイル */
 .stats-card h3 {
-    margin: 0 0 10px 0;
+    margin: 0 0 8px 0;
     font-size: 14px;
     font-weight: 500;
     color: #ffffff;
@@ -176,7 +220,7 @@ body {
 }
 
 .stats-card h2 {
-    margin: 0 0 8px 0;
+    margin: 0 0 6px 0;
     font-size: 28px;
     font-weight: 700;
 }
@@ -188,24 +232,12 @@ body {
     opacity: 0.8;
 }
 
-/* パネルのスタイル */
-.panel {
-    background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
-    border: 1px solid #444;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-/* ヘッダーのスタイル */
+/* ダッシュボードヘッダー */
 .dashboard-header {
     background: linear-gradient(90deg, #1a1a1a 0%, #2d2d2d 100%);
-    padding: 20px;
+    padding: 15px;
     border-radius: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -265,7 +297,7 @@ body {
     animation: fadeIn 0.5s ease-out;
 }
 
-/* スクロールバーのスタイル */
+/* スクロールバー */
 ::-webkit-scrollbar {
     width: 8px;
 }
