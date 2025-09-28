@@ -94,7 +94,7 @@ def get_user_timeseries(user_id: str) -> Optional[Dict[str, Any]]:
 
 def create_user_performance_chart(
     selected_user: Optional[str], user_stats: Optional[Dict[str, Any]]
-) -> go.Figure:
+) -> html.Div:
     """ユーザーパフォーマンスチャートを作成"""
     if selected_user:
         timeseries_data = get_user_timeseries(selected_user)
@@ -109,7 +109,7 @@ def create_user_performance_chart(
 def create_user_stats_display(
     selected_user: Optional[str],
     user_stats: Optional[Dict[str, Any]],
-    fig_user: go.Figure,
+    user_chart: html.Div,
 ) -> html.Div:
     """ユーザー統計表示を作成"""
     if not selected_user:
@@ -154,13 +154,7 @@ def create_user_stats_display(
                     },
                 ),
                 html.Div(
-                    [
-                        dcc.Graph(
-                            id="user-performance-chart",
-                            figure=fig_user,
-                            style={"height": "100%", "width": "100%"},
-                        )
-                    ],
+                    [user_chart],
                     style={
                         "width": "100%",
                         "height": "300px",
@@ -184,13 +178,7 @@ def create_user_stats_display(
         [
             user_stats_info,
             html.Div(
-                [
-                    dcc.Graph(
-                        id="user-performance-chart",
-                        figure=fig_user,
-                        style={"height": "100%", "width": "100%"},
-                    )
-                ],
+                [user_chart],
                 style={
                     "width": "100%",
                     "height": "300px",
@@ -477,11 +465,11 @@ def update_user_display(selected_user: Optional[str]) -> Tuple[html.Div, str]:
         user_stats = get_user_stats(selected_user)
 
         # ユーザー別パフォーマンスチャートを作成
-        fig_user = create_user_performance_chart(selected_user, user_stats)
+        user_chart = create_user_performance_chart(selected_user, user_stats)
 
         # ユーザー統計情報の表示
         user_stats_display = create_user_stats_display(
-            selected_user, user_stats, fig_user
+            selected_user, user_stats, user_chart
         )
 
         logger.info(f"ユーザー選択更新: {selected_user}")

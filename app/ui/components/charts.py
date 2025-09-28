@@ -265,7 +265,7 @@ class UserPerformanceChart:
     @staticmethod
     def create(
         selected_user: Optional[str], user_stats: Optional[Dict[str, Any]]
-    ) -> go.Figure:
+    ) -> html.Div:
         """
         ユーザーパフォーマンスチャートを作成
 
@@ -274,12 +274,11 @@ class UserPerformanceChart:
             user_stats: ユーザー統計データ
 
         Returns:
-            ユーザーパフォーマンスチャートのFigureオブジェクト
+            ユーザーパフォーマンスチャートのDivコンポーネント
         """
         fig_user = go.Figure()
 
         if selected_user and user_stats:
-            # 時系列データがある場合は実際のデータを使用
             fig_user.add_trace(
                 go.Scatter(
                     x=["過去", "現在"],
@@ -291,12 +290,12 @@ class UserPerformanceChart:
                 )
             )
 
-        return fig_user
+        return UserPerformanceChart._create_div(fig_user)
 
     @staticmethod
     def create_with_timeseries(
         timeseries_data: Dict[str, Any], selected_user: str
-    ) -> go.Figure:
+    ) -> html.Div:
         """
         時系列データを使用してユーザーパフォーマンスチャートを作成
 
@@ -305,7 +304,7 @@ class UserPerformanceChart:
             selected_user: 選択されたユーザーID
 
         Returns:
-            ユーザーパフォーマンスチャートのFigureオブジェクト
+            ユーザーパフォーマンスチャートのDivコンポーネント
         """
         fig_user = go.Figure()
 
@@ -348,4 +347,26 @@ class UserPerformanceChart:
             autosize=True,
         )
 
-        return fig_user
+        return UserPerformanceChart._create_div(fig_user)
+
+    @staticmethod
+    def _create_div(fig_user: go.Figure) -> html.Div:
+        """共通のDivコンポーネントを作成"""
+        return html.Div(
+            [
+                html.H3(
+                    "ユーザースコア推移",
+                    style={
+                        "color": "#ffffff",
+                        "marginBottom": "10px",
+                        "fontSize": "16px",
+                        "textAlign": "center",
+                    },
+                ),
+                dcc.Graph(
+                    figure=fig_user,
+                    style={"height": "calc(100% - 50px)", "width": "100%"},
+                ),
+            ],
+            style={"height": "100%", "display": "flex", "flexDirection": "column"},
+        )
